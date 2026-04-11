@@ -1,0 +1,30 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go
+vendor/
+
+# Node (annotator)
+node_modules/
+/annotator/dist/
+/annotator/build/
+package-lock.json.bak
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local-only experiments
+/scratch/
+/tmp/

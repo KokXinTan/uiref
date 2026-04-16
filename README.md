@@ -2,7 +2,7 @@
 
 > A language-agnostic sidecar format for named spatial anchors on image assets, designed so LLMs and humans can overlay UI elements, hitboxes, and drawings at pixel-precise coordinates without guessing.
 
-**Status:** alpha / spec stage. No implementation yet. This repo currently contains the design and format specification; tooling lands in follow-up commits.
+**Status:** alpha. The annotator is functional — [try it in your browser](https://kokxintan.github.io/anchorfile/) or open `annotator/index.html` locally.
 
 ## The problem
 
@@ -75,19 +75,22 @@ Humans author it once through a frictionless local browser annotator. Machines (
 anchorfile/
 ├── SPEC.md               # The anchorfile JSON format (v1 schema)
 ├── docs/design.md        # Architecture and rationale
-├── cli/                  # Planned: `anchor` CLI and web annotator
-├── annotator/            # Planned: browser drawing UI (TypeScript canvas)
-├── skill/                # Claude Skill for LLM consumers
+├── cli/                  # Planned: `anchor` CLI wrapper
+├── annotator/            # Browser annotator (vanilla JS, zero dependencies)
+├── skill/                # Claude Skill for LLM integration
 └── examples/             # Worked examples
 ```
 
-## Planned tooling
+## Tooling
 
-- **`anchor annotate <image>`** — opens a local browser UI to draw named regions on an image, writes `<image>.anchors.json` beside it.
-- **`anchor render <sidecar>`** — burns all anchors onto a copy of the source image for visual verification. Framework-agnostic debug overlay.
+- **Browser annotator** ([live](https://kokxintan.github.io/anchorfile/) / [local](./annotator/index.html)) — draw named regions on any image and export a spec-compliant `.anchors.json`. Supports rect, point, and ellipse primitives with zoom, pan, arrow-key nudge, undo/redo, and duplicate.
+- **Claude Skill** (`skill/SKILL.md`) — teaches Claude Code to check for sidecars before placing UI, and to request annotation when ground truth is missing.
+
+### Planned
+
+- **`anchor render <sidecar>`** — burns all anchors onto a copy of the source image for visual verification. (The browser annotator already has a Render button that does this.)
 - **`anchor verify <sidecar>`** — checks `content_hash` against the current image and warns on drift.
 - **`anchor gen <sidecar> --lang swift`** — generates typed constants in your target language (Swift first, others via community).
-- **Claude Skill** — teaches Claude Code to check for sidecars before placing UI on any image, and to request annotation when ground truth is missing.
 
 See [docs/design.md](./docs/design.md) for the full architecture, roadmap, and scope locks.
 
@@ -101,4 +104,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ## Contributing
 
-The spec and design docs are the load-bearing artifacts right now. Issues and discussion about the format are more valuable than PRs to empty directories. When implementation starts, contribution guidelines will land here.
+Issues, feature requests, and discussion about the format are welcome. The annotator is functional; the CLI and codegen are next.

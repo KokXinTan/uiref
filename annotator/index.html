@@ -194,9 +194,36 @@
     vx: 0, vy: 0, zoom: 1,           // view: screen = img * zoom + (vx, vy)
     draw: null, drag: null, pan: null, // interaction transients
     space: false,
+    undo: [], redo: [],               // undo/redo stacks (snapshots of anchors)
   };
   let dirty = true;
   const markDirty = () => { dirty = true; };
+
+  // Deep-clone anchors for undo snapshots
+  function saveUndo() {
+    S.undo.push({ anchors: JSON.parse(JSON.stringify(S.anchors)), selId: S.selId, nextId: S.nextId,
+      counters: { ...S.counters } });
+    S.redo = []; // new action clears redo
+    if (S.undo.length > 100) S.undo.shift();
+  }
+  function doUndo() {
+    if (!S.undo.length) return;
+    S.redo.push({ anchors: JSON.parse(JSON.stringify(S.anchors)), selId: S.selId, nextId: S.nextId,
+      counters: { ...S.counters } });
+    const snap = S.undo.pop();
+    S.anchors = snap.anchors; S.selId = snap.selId; S.nextId = snap.nextId;
+    S.counters = snap.counters;
+    refreshList(); markDirty();
+  }
+  function doRedo() {
+    if (!S.redo.length) return;
+    S.undo.push({ anchors: JSON.parse(JSON.stringify(S.anchors)), selId: S.selId, nextId: S.nextId,
+      counters: { ...S.counters } });
+    const snap = S.redo.pop();
+    S.anchors = snap.anchors; S.selId = snap.selId; S.nextId = snap.nextId;
+    S.counters = snap.counters;
+    refreshList(); markDirty();
+  }
 
   // ================================================================
   // DOM
@@ -222,6 +249,7 @@
   const aColor = a => COLORS[(a.id - 1) % COLORS.length];
 
   function addAnchor(kind, props) {
+    saveUndo();
     S.counters[kind]++;
     const a = { id: S.nextId++, name: kind + '_' + S.counters[kind], label: '', kind, ...props };
     S.anchors.push(a);
@@ -239,9 +267,22 @@
   }
 
   function removeAnchor(id) {
+    saveUndo();
     S.anchors = S.anchors.filter(a => a.id !== id);
     if (S.selId === id) S.selId = null;
     refreshList(); markDirty();
+  }
+
+  function duplicateSelected() {
+    const a = anchorById(S.selId);
+    if (!a) return;
+    const offset = 20;
+    const props = {};
+    if (a.kind === 'rect') { props.x = a.x + offset; props.y = a.y + offset; props.w = a.w; props.h = a.h; }
+    else if (a.kind === 'point') { props.x = a.x + offset; props.y = a.y + offset; }
+    else if (a.kind === 'ellipse') { props.cx = a.cx + offset; props.cy = a.cy + offset; props.rx = a.rx; props.ry = a.ry; }
+    const dup = addAnchor(a.kind, props);
+    dup.label = a.label;
   }
 
   function hitTest(sx, sy) {
@@ -438,7 +479,7 @@
 
   canvas.addEventListener('mouseup', e => {
     if (S.pan) { S.pan = null; canvas.style.cursor = S.space ? 'grab' : (S.tool === 'select' ? 'default' : 'crosshair'); return; }
-    if (S.drag) { S.drag = null; canvas.style.cursor = 'default'; return; }
+    if (S.drag) { saveUndo(); S.drag = null; canvas.style.cursor = 'default'; return; }
     if (S.draw) {
       const d = S.draw; S.draw = null;
       if (d.kind === 'rect') {
@@ -481,9 +522,16 @@
 
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.selId) removeAnchor(S.selId);
 
+    // Undo / Redo / Duplicate
+    if ((e.metaKey || e.ctrlKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
+    if ((e.metaKey || e.ctrlKey) && k === 'z' && e.shiftKey) { e.preventDefault(); doRedo(); }
+    if ((e.metaKey || e.ctrlKey) && k === 'y') { e.preventDefault(); doRedo(); }
+    if ((e.metaKey || e.ctrlKey) && k === 'd') { e.preventDefault(); duplicateSelected(); }
+
     // Nudge
     if (S.selId && e.key.startsWith('Arrow')) {
       e.preventDefault();
+      saveUndo();
       const a = anchorById(S.selId); if (!a) return;
       const s = e.shiftKey ? 10 : 1;
       const dx = e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0;
@@ -601,8 +649,13 @@
   }
 
   async function sha256(buf) {
-    const h = await crypto.subtle.digest('SHA-256', buf);
-    return 'sha256:' + [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      const h = await crypto.subtle.digest('SHA-256', buf);
+      return 'sha256:' + [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // crypto.subtle unavailable (file:// in some browsers) — skip hash
+      return 'sha256:unavailable-open-via-https-or-chrome';
+    }
   }
 
   function guessExt() {

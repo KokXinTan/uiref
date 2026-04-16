@@ -29,7 +29,7 @@ If the sidecar exists, read it with the Read tool and use the anchors verbatim. 
 
 Instead, stop and tell the user:
 
-> I need precise coordinates on `<image>`. Please run `anchor annotate <image>` — it will open a local browser annotator where you can draw named regions on the image. Save the result and I'll pick up the sidecar on the next turn.
+> I need precise coordinates on `<image>`. Please open the anchorfile annotator at https://kokxintan.github.io/anchorfile/ (or `annotator/index.html` locally), load `<image>`, draw named regions, and click Export. Place the downloaded `.anchors.json` beside the image and I'll use the exact coordinates on the next turn.
 
 Wait for them to complete the annotation before continuing. On the next turn, re-check for the sidecar and proceed.
 
@@ -42,13 +42,9 @@ Wait for them to complete the annotation before continuing. On the next turn, re
 
 ## 4. After making changes, verify visually
 
-If you've wired a new anchor into code and want to confirm it's correct:
+If you've wired a new anchor into code and want to confirm it's correct, ask the user to open the annotator, import the `.anchors.json`, and click the **Render** button — it burns every anchor's shape onto the source image and downloads a debug PNG. Alternatively, the user can use `anchor render <sidecar>` if the CLI is installed.
 
-```
-anchor render <path-to-sidecar>
-```
-
-This burns every anchor's shape onto a debug copy of the source image, saved beside the sidecar. Use the Read tool to view that PNG and visually confirm your placements before the user has to build and run the app.
+Use the Read tool to view that rendered PNG and visually confirm your placements before the user has to build and run the app.
 
 ## 5. When the user asks to add a new tap target, hitbox, or overlay
 

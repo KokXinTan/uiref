@@ -306,6 +306,8 @@
   // =============================================================
 
   // Tier 1: data-uiref-* attributes (from build plugins)
+  // Returns the INNERMOST component that has data-uiref-*. The ancestor
+  // chain is collected separately via resolveAncestors().
   function resolveFromDataAttrs(el) {
     let cur = el;
     while (cur && cur !== document.documentElement) {
@@ -320,6 +322,32 @@
       cur = cur.parentElement;
     }
     return null;
+  }
+
+  // Walk up from the element and collect EVERY data-uiref-* match up to <body>.
+  // Returns an ordered array from innermost → outermost. Useful when the
+  // innermost component is a generic wrapper (e.g. EchartsWrapper) and the
+  // actual "which chart" information lives in a parent that used the wrapper.
+  function resolveAncestors(el) {
+    const chain = [];
+    const seen = new Set();
+    let cur = el;
+    while (cur && cur !== document.documentElement) {
+      if (cur.dataset) {
+        const file = cur.dataset.uirefFile;
+        const line = cur.dataset.uirefLine;
+        const component = cur.dataset.uirefComponent;
+        if (file && line && component) {
+          const key = `${file}:${line}:${component}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            chain.push({ file, line: parseInt(line, 10), component });
+          }
+        }
+      }
+      cur = cur.parentElement;
+    }
+    return chain;
   }
 
   // Tier 2a: React Fiber _debugSource (dev builds only, pre-React-19)
@@ -423,6 +451,12 @@
     if (shotResp?.ok) {
       elementShot = await cropScreenshot(shotResp.dataUrl, rect);
     }
+    // Ancestor chain — the innermost match is target; the rest tell us which
+    // specific parent/page contains this instance (critical for generic
+    // wrappers like EchartsWrapper where the "which chart" info is one or
+    // more levels up).
+    const ancestors = resolveAncestors(el);
+    const parentChain = ancestors.slice(1); // exclude target itself
     return {
       format: 'uiref/v1',
       captured_at: new Date().toISOString(),
@@ -431,6 +465,7 @@
         line: src.line,
         component: src.component,
       },
+      ancestors: parentChain.length ? parentChain : null,
       element: {
         tag: el.tagName.toLowerCase(),
         text: (el.textContent || '').trim().slice(0, 200) || null,

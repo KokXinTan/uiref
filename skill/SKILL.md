@@ -11,9 +11,8 @@ The user has (or should have) the uiref Chrome extension installed. When they wa
 - **`<timestamp>.uiref-flow.json`** — an ordered chain of elements (workflow mode, multiple clicks)
 
 Each file contains:
-- `target.file` — the exact source file (relative to project root)
-- `target.line` — the line number where the component is defined
-- `target.component` — the component's display name
+- `target.file` / `target.line` / `target.component` — the INNERMOST component (the DOM immediately containing the clicked element)
+- `ancestors` — ordered parent chain (inner → outer). Critical when `target` is a generic wrapper (like `EchartsWrapper`, `Card`, `Button`) and the "which one" context lives one or two levels up
 - `element.tag` / `element.text` / `element.attributes` — what the DOM looked like
 - `screenshot` — a base64 PNG of the element itself (you can view it via Read)
 
@@ -76,8 +75,10 @@ Or, if the user already stated their intent:
 
 **For a single uiref:**
 - Open the file at `target.file` and start editing near `target.line`.
-- If `target.file` is null (unresolved), fall back to greping the codebase for `element.text` and `element.tag`. Propose candidate files and ask the user to confirm.
-- If `screenshot` is present, you may view it using the Read tool to understand the visual context.
+- **If `target.component` is a generic wrapper** (names like `EchartsWrapper`, `Card`, `ChartWrapper`, `Button`, `Container`, `Wrapper`, `Panel`, etc.), the interesting code is likely in `ancestors[0]` (the parent that USED the wrapper). Look there too — that's typically where the specific chart / card / button is configured.
+- Before picking the file to edit, look at `ancestors[0]` (if present). If the user said "the chart" and target is `EchartsWrapper`, the parent (e.g. `WaterConsumptionChart.svelte`) is probably what they want to modify.
+- If `target.file` is null (unresolved), fall back to greping the codebase for `element.text` and `element.tag`, or reading the screenshot if one is present. Propose candidates and ask the user to confirm.
+- If `screenshot` is present, view it via the Read tool — for ambiguous targets (like a generic chart canvas), the screenshot visually shows which instance the user picked.
 
 **For a uiref-flow:**
 - Each step's `target` is a full uiref — source file, line, component, screenshot.
@@ -88,15 +89,14 @@ Or, if the user already stated their intent:
   - *Multi-page flow* — the `dom_path` and `element.attributes` from each step help understand transitions.
 - Edit all relevant files; confirm the full list of changes before applying if the flow is large.
 
-**5. After using the uiref, delete it.**
+**5. Do NOT delete uiref files automatically.**
 
-Always delete the uiref file after you've used it, so the inbox stays clean and the same capture isn't re-consumed on the next turn:
+Leave captured uiref files in `~/uiref-inbox/` — do not `rm` them. Two reasons:
 
-```bash
-rm ~/uiref-inbox/<the-file-you-used>.uiref.json
-```
+1. The user may want to refer back to the same capture mid-conversation ("wait, which chart did I click?"). Deleting destroys the screenshot and context.
+2. The skill always reads the MOST RECENT file anyway, so old captures naturally fall off the end.
 
-The extension also auto-prunes files older than 1 hour on each capture, so even if cleanup is missed, the inbox won't grow forever.
+The extension auto-prunes files older than 1 hour on each new capture, so the inbox self-cleans without intervention. Only delete a uiref file if the user explicitly says to clean up.
 
 Or, if the user commonly captures many uirefs, leave the file and simply reference the most recent one next time.
 

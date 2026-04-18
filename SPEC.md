@@ -42,7 +42,8 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 |----------------|---------|----------|-------------|
 | `format`       | string  | yes      | Always `"uiref/v1"` for this schema version. |
 | `captured_at`  | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
-| `target`       | object  | yes      | Where the component is defined. See below. |
+| `target`       | object  | yes      | The innermost component whose DOM contains the clicked element. See below. |
+| `ancestors`    | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null` or omitted. |
 | `element`      | object  | yes      | What the DOM element looks like. See below. |
 | `screenshot`   | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
 | `user_intent`  | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time; the user types intent into the AI chat afterward. |

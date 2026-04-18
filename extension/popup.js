@@ -91,7 +91,7 @@ async function render() {
     sendBtn.addEventListener('click', () => workflowAction('send'));
     controls.appendChild(sendBtn);
 
-    // Row: Resume / Hide / Cancel
+    // Row: Resume / Hide
     const row = document.createElement('div');
     row.className = 'btn-row';
     const resumeBtn = document.createElement('button');
@@ -106,6 +106,16 @@ async function render() {
     hideBtn.addEventListener('click', () => workflowAction('hide'));
     row.appendChild(hideBtn);
     controls.appendChild(row);
+
+    // Undo last step
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'btn btn-secondary';
+    undoBtn.style.marginTop = '6px';
+    const lastStep = workflow.steps[workflow.steps.length - 1];
+    const lastName = lastStep?.target?.component || lastStep?.element?.tag || 'last';
+    undoBtn.textContent = `↶ Remove last step (${lastName})`;
+    undoBtn.addEventListener('click', () => workflowAction('undo'));
+    controls.appendChild(undoBtn);
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn btn-secondary';

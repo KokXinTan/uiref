@@ -223,6 +223,7 @@
       e.preventDefault();
       if (mode === 'workflow') {
         workflow = null;
+        clearStoredWorkflow();
         showToast({ title: 'Workflow cancelled' });
       }
       deactivatePicker();
@@ -233,6 +234,10 @@
       } else {
         showToast({ title: 'Workflow empty', detail: 'Click at least one element first.' });
       }
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && mode === 'workflow') {
+      e.preventDefault();
+      e.stopPropagation();
+      undoLastStep();
     } else if (e.key === 'ArrowUp' && hoverEl?.parentElement) {
       e.preventDefault();
       hoverEl = hoverEl.parentElement;
@@ -462,16 +467,35 @@
       workflow.steps.push(uiref);
       await saveWorkflow();
       updateCounter();
-      updateHint(); // refresh the "Send N steps to Claude" button
-      syncState();  // update the tray badge count
+      updateHint();
+      syncState();
       showToast({
         title: `+ step ${workflow.steps.length}: <${uiref.target.component || uiref.element.tag}>`,
-        detail: uiref.target.file ? `${uiref.target.file}:${uiref.target.line}` : 'unresolved',
+        detail: `${uiref.target.file ? uiref.target.file + ':' + uiref.target.line : 'unresolved'} · ${isMac() ? '⌘Z' : 'Ctrl+Z'} to undo`,
       });
     } catch (err) {
       console.error('[uiref] step capture failed', err);
       showToast({ title: 'Step capture failed', detail: err.message || String(err), error: true });
     }
+  }
+
+  async function undoLastStep() {
+    if (!workflow || workflow.steps.length === 0) {
+      showToast({ title: 'Nothing to undo', detail: 'No steps captured yet.' });
+      return;
+    }
+    const removed = workflow.steps.pop();
+    await saveWorkflow();
+    syncState();
+    const n = workflow.steps.length;
+    showToast({
+      title: `Removed <${removed.target.component || removed.element.tag}>`,
+      detail: n === 0 ? 'Workflow now empty.' : `${n} step${n === 1 ? '' : 's'} remaining.`,
+    });
+  }
+
+  function isMac() {
+    return /Mac|iPhone|iPod|iPad/.test(navigator.platform || navigator.userAgent);
   }
 
   async function finishWorkflow() {
@@ -703,6 +727,7 @@
         case 'send': finishWorkflow(); break;
         case 'hide': pauseWorkflow(); break;
         case 'resume': resumeWorkflow(); break;
+        case 'undo': undoLastStep(); break;
         case 'cancel':
           workflow = null;
           clearStoredWorkflow();

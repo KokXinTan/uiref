@@ -2,7 +2,13 @@
   "name": "@uiref/vue",
   "version": "0.1.0",
   "description": "Vite plugin that injects data-uiref-* attributes into Vue 3 SFC templates for the uiref Chrome extension.",
-  "keywords": ["vue", "vite", "uiref", "claude", "devtools"],
+  "keywords": [
+    "vue",
+    "vite",
+    "uiref",
+    "claude",
+    "devtools"
+  ],
   "license": "MIT",
   "author": "uiref contributors",
   "type": "module",
@@ -15,7 +21,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/KokXinTan/uiref.git",
+    "url": "git+https://github.com/KokXinTan/uiref.git",
     "directory": "plugins/vue"
   },
   "peerDependencies": {

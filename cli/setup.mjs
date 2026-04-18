@@ -200,15 +200,23 @@ if (framework === 'svelte') {
 // ---------------------------------------------------------------------------
 // 4. Copy Claude skill
 // ---------------------------------------------------------------------------
-const skillSrc = join(REPO_ROOT, 'skill', 'SKILL.md');
+// Look for SKILL.md in these places, in order:
+//   1. ./SKILL.md (bundled next to this script — the published npm package)
+//   2. ../skill/SKILL.md (repo layout when run from a local checkout)
+const skillCandidates = [
+  join(__dirname, 'SKILL.md'),
+  join(REPO_ROOT, 'skill', 'SKILL.md'),
+];
+const skillSrc = skillCandidates.find(existsSync);
 const skillDestDir = join(homedir(), '.claude', 'skills', 'uiref');
 const skillDest = join(skillDestDir, 'SKILL.md');
-if (existsSync(skillSrc)) {
+if (skillSrc) {
   mkdirSync(skillDestDir, { recursive: true });
   copyFileSync(skillSrc, skillDest);
   ok(`Claude skill installed at ${C.dim}${skillDest}${C.reset}`);
 } else {
-  warn('Could not find skill/SKILL.md locally. Manually copy from https://github.com/KokXinTan/uiref/tree/main/skill');
+  warn('Could not find SKILL.md. Download it from https://github.com/KokXinTan/uiref/blob/main/skill/SKILL.md');
+  warn(`and copy to ${skillDest}`);
 }
 
 // ---------------------------------------------------------------------------

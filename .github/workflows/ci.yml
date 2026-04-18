@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax-check:
+    name: Syntax check (JS + JSON)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JavaScript syntax
+        run: |
+          set -e
+          files=$(find extension plugins cli \( -name '*.js' -o -name '*.mjs' \) -not -path '*/node_modules/*')
+          echo "Checking $(echo "$files" | wc -l) files..."
+          for f in $files; do
+            node --check "$f"
+          done
+          echo "✓ all JS files parse"
+
+      - name: JSON validity
+        run: |
+          set -e
+          for f in extension/manifest.json plugins/*/package.json cli/package.json; do
+            echo "Validating $f"
+            node -e "JSON.parse(require('fs').readFileSync('$f', 'utf8'))"
+          done
+          echo "✓ all JSON files valid"
+
+      - name: Plugin smoke tests
+        run: |
+          set -e
+          echo "Svelte preprocessor on a sample component..."
+          cat > /tmp/sample.svelte <<'EOF'
+          <script>export let name;</script>
+          <nav><a href="/">Home</a><button>{name}</button></nav>
+          EOF
+
+          node -e "
+          import('./plugins/svelte/index.js').then(({ default: uiref }) => {
+            const pp = uiref({ enabled: true, cwd: '/tmp' });
+            const src = require('fs').readFileSync('/tmp/sample.svelte', 'utf8');
+            const { code } = pp.markup({ content: src, filename: '/tmp/Nav.svelte' });
+            if (!code.includes('data-uiref-file')) {
+              console.error('FAIL: svelte preprocessor did not inject data-uiref-*');
+              process.exit(1);
+            }
+            console.log('✓ svelte preprocessor injects attributes');
+          });
+          "

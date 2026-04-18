@@ -92,12 +92,17 @@ Or, if the user already stated their intent:
 - Cite the relevant event to the user: "I see the network request to `/api/charts/water` returned 500 just before you clicked — the button handler is calling a broken endpoint."
 
 **For a uiref-flow:**
-- Each step's `target` is a full uiref — source file, line, component, screenshot.
+- Each step's `target` is a full uiref — source file, line, component, screenshot, **and `target.page.url`** (the URL at the moment that step was captured — use this to understand route transitions within a flow).
+- Each step's `action` field tells you *what* the user did with that element:
+  - `type` → this is an input / textarea / select (user typed or intends to type)
+  - `click` → this is a button
+  - `navigate` → this is a link that changes route
+  - `focus` / `toggle` / `ref` → see SPEC
 - The flow's `user_intent` (flow-level) and individual step intents describe what to do.
 - Common flow patterns:
-  - *User journey / bug repro* — "fix the issue that happens between step 2 and step 3" — look at both steps' components and their interaction.
-  - *Refactor group* — "these share a pattern, extract a component" — treat all steps' components as a set, find commonalities.
-  - *Multi-page flow* — the `dom_path` and `element.attributes` from each step help understand transitions.
+  - *User journey / bug repro* — "fix the issue that happens between step 2 and step 3" — look at both steps' components, their URLs (did the route change?), and the `events` inside each step.
+  - *Refactor group* — "these share a pattern, extract a component" — treat all steps' components as a set.
+  - *Multi-page flow* — compare `target.page.url` / `target.page.pathname` across steps to see where navigation happened.
 - Edit all relevant files; confirm the full list of changes before applying if the flow is large.
 
 **5. Do NOT delete uiref files automatically.**

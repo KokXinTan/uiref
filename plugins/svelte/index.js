@@ -35,43 +35,38 @@ export default function uirefPreprocess(options = {}) {
       if (!isEnabled) return { code: content };
       if (!filename) return { code: content };
 
-      // Never process third-party components — they have their own component model
-      // and their source locations aren't useful for the user's codebase.
+      // Never process third-party components.
       if (filename.includes('/node_modules/') || filename.includes('\\node_modules\\')) {
         return { code: content };
       }
 
-      // Resolve a project-relative path for the data attribute
       let relFile = filename;
       try {
         relFile = path.relative(cwd, filename).replace(/\\/g, '/');
       } catch {}
-      // Defensive: if the relative path escapes the project (starts with ..), skip.
       if (relFile.startsWith('..')) return { code: content };
 
-      // Component name: filename basename without extension. Title-case if lowercase.
-      const base = path.basename(filename, path.extname(filename));
-      const componentName = base;
+      const componentName = path.basename(filename, path.extname(filename));
 
-      // Find the first meaningful top-level element in the markup. This is a minimal
-      // string-based approach to avoid a full AST dependency. It covers 95% of cases:
-      // the first <tag ...> in the file that isn't inside a <script> or <style> block.
-      const { index, openTagEnd } = findFirstElementOutsideBlocks(content);
-      if (index === -1) return { code: content };
+      // Tag EVERY HTML element in the template (not just the first). This
+      // ensures inline <a>, <button>, <input> etc. resolve to their exact
+      // source line even when they're inside {#if}/{#each} blocks or portaled
+      // out of the component root. Component instances (capital-letter or
+      // dotted tag names) are left alone — their data-uiref-* comes from
+      // the child component's own preprocessing.
+      const insertions = findAllInjectableElements(content);
+      if (insertions.length === 0) return { code: content };
 
-      // Compute 1-indexed line number of that element
-      const line = content.slice(0, index).split('\n').length;
-
-      // Inject data-uiref-* attributes just before the '>' (or '/>') of the open tag
-      const insert =
-        ` data-uiref-file="${escapeAttr(relFile)}"` +
-        ` data-uiref-line="${line}"` +
-        ` data-uiref-component="${escapeAttr(componentName)}"`;
-
-      // openTagEnd points to the position of '>' or '/>'; insert before that character
-      const before = content.slice(0, openTagEnd);
-      const after = content.slice(openTagEnd);
-      const code = before + insert + after;
+      // Apply insertions in reverse order so earlier offsets stay valid
+      let code = content;
+      for (let i = insertions.length - 1; i >= 0; i--) {
+        const { insertAt, line } = insertions[i];
+        const attrs =
+          ` data-uiref-file="${escapeAttr(relFile)}"` +
+          ` data-uiref-line="${line}"` +
+          ` data-uiref-component="${escapeAttr(componentName)}"`;
+        code = code.slice(0, insertAt) + attrs + code.slice(insertAt);
+      }
 
       return { code };
     },
@@ -83,19 +78,37 @@ function escapeAttr(s) {
 }
 
 /**
- * Find the first element outside of <script> and <style> blocks.
- * Returns { index, openTagEnd } where:
- *   index      = position of the '<' of the opening tag in the source
- *   openTagEnd = position of the '>' (or '/>') in the source
- * Returns { index: -1 } if no suitable element found.
+ * Find ALL HTML element opens outside of script/style/comment/svelte:* blocks.
+ * Returns an array of { insertAt, line } for each element, in source order.
+ *
+ * Only lowercase-tag elements (HTML) are returned; Svelte component instances
+ * (capital-letter or dotted tags like <MyComponent> or <Menu.Item>) are
+ * skipped because they don't emit their own DOM root from the parent's side.
+ * Those components' root elements get tagged by their own preprocessing.
  */
-function findFirstElementOutsideBlocks(src) {
-  // Mask out:
-  //   - <script>...</script> and <style>...</style>
-  //   - <!-- comments -->
-  //   - <svelte:head>...</svelte:head> (and other svelte:* paired tags)
-  //   - self-closing <svelte:options /> etc.
-  // ...so we don't pick an element inside them.
+function findAllInjectableElements(src) {
+  const masked = buildMask(src);
+  const out = [];
+
+  // Only match lowercase-start tags (HTML elements), not component instances.
+  const tagRE = /<([a-z][a-zA-Z0-9-]*)\b/g;
+  let m;
+  while ((m = tagRE.exec(masked))) {
+    const end = findOpenTagEnd(masked, m.index);
+    if (!end) continue;
+    const insertAt = end.selfClosing ? end.end - 1 : end.end;
+    const line = src.slice(0, m.index).split('\n').length;
+    out.push({ insertAt, line });
+  }
+  return out;
+}
+
+/**
+ * Build a masked version of the source where script/style/svelte:* blocks
+ * and HTML comments are replaced with whitespace so element-finding regexes
+ * don't match things inside them.
+ */
+function buildMask(src) {
   const mask = src.split('');
   const patterns = [
     /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
@@ -109,7 +122,15 @@ function findFirstElementOutsideBlocks(src) {
       for (let i = m.index; i < m.index + m[0].length; i++) mask[i] = ' ';
     }
   }
-  const masked = mask.join('');
+  return mask.join('');
+}
+
+/**
+ * Legacy: find the FIRST element outside blocks.
+ * Kept for backward compat; not used by the preprocessor anymore.
+ */
+function findFirstElementOutsideBlocks(src) {
+  const masked = buildMask(src);
 
   // Find first <Tag ...> where Tag starts with a letter.
   // Skip Svelte special blocks like {#if}, {#each} — they use { not <.

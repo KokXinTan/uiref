@@ -241,17 +241,18 @@ Filename convention: `<timestamp>.uiref-flow.json` (distinct from `.uiref.json`)
 
 ### Action vocabulary
 
-| Action          | Meaning |
-|-----------------|---------|
-| `ref`           | The user pointed at this element as a reference. No interaction implied. (Manual workflow chaining uses this by default.) |
-| `click`         | Pointer click. |
-| `type`          | Text was typed into an input. Include a `value` field with the string typed. |
-| `focus`         | Focus transition. |
-| `hover`         | Pointer hover. |
-| `navigate`      | URL changed. Include `from` and `to` fields with URLs. |
-| `assert_visible`, `assert_text`, `assert_absent` | User-marked assertions — what they expected to be true at this step. |
+| Action          | Meaning | Inferred from |
+|-----------------|---------|---------------|
+| `ref`           | The user pointed at this element as a reference. No interaction implied. Default for non-interactive elements. | Everything not below |
+| `click`         | Pointer click on a button or button-role element. | `<button>`, `[role="button"]` |
+| `navigate`      | User intends to navigate via a link. | `<a>`, `[role="link"]` |
+| `type`          | Text input target — user is typing or will type here. | `<input>`, `<textarea>`, `<select>`, `[role="textbox"]` |
+| `focus`         | Focus transition (e.g. clicking a label focuses its paired input). | `<label>` |
+| `toggle`        | Toggle a disclosure / expandable section. | `<summary>` |
+| `hover`         | Pointer hover. (Not automatically inferred — reserved for future event-based capture.) | — |
+| `assert_visible`, `assert_text`, `assert_absent` | User-marked assertions. | — |
 
-Unknown actions MUST be preserved by tools that round-trip flows but MAY be ignored by consumers.
+For manual workflow chaining (the default mode — click to capture), actions are **auto-inferred from the captured element's tag / role** so flows carry meaningful intent. Unknown actions MUST be preserved by tools that round-trip flows but MAY be ignored by consumers.
 
 ### Consumption
 

@@ -746,6 +746,28 @@
     return /Mac|iPhone|iPod|iPad/.test(navigator.platform || navigator.userAgent);
   }
 
+  // Infer a semantic action from the captured element so workflow steps
+  // carry more meaning than just "ref". Rules:
+  //   <input> / <textarea> / <select>     → "type"
+  //   <a>                                 → "navigate"
+  //   <button> / role="button"            → "click"
+  //   <label>                             → "focus" (clicking a label focuses its input)
+  //   <summary>                           → "toggle"
+  //   anything else                       → "ref"
+  function inferAction(uiref) {
+    const tag = uiref?.element?.tag;
+    if (!tag) return 'ref';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return 'type';
+    if (tag === 'a') return 'navigate';
+    if (tag === 'button') return 'click';
+    if (tag === 'label') return 'focus';
+    if (tag === 'summary') return 'toggle';
+    const role = uiref?.element?.attributes?.role;
+    if (role === 'button' || role === 'link') return 'click';
+    if (role === 'textbox') return 'type';
+    return 'ref';
+  }
+
   async function finishWorkflow() {
     if (!workflow || !workflow.steps.length) return;
     try {
@@ -758,7 +780,7 @@
         user_intent: null,
         steps: workflow.steps.map((uiref, i) => ({
           order: i + 1,
-          action: 'ref', // manual chain — no automatic action detection
+          action: inferAction(uiref),
           target: uiref,
           timestamp_ms: new Date(uiref.captured_at).getTime() - startedAtMs,
         })),

@@ -12,15 +12,27 @@
   if (window.__uirefInjected_main) return;
   window.__uirefInjected_main = true;
 
-  // Opt-out config. Set BEFORE uiref loads (e.g., in your app bootstrap):
-  //   window.__uirefConfig = { patchConsole: false, patchNetwork: false };
-  // Useful when debugging framework warnings — uiref's console wrapper
-  // shows at the top of every stack trace otherwise.
+  // Config — set BEFORE uiref loads (e.g., in your app bootstrap):
+  //   window.__uirefConfig = {
+  //     patchConsole: false,              // don't wrap console.*
+  //     patchErrors: false,               // don't hook window.error
+  //     patchNetwork: false,              // don't wrap fetch/XHR
+  //     patchNavigation: false,           // don't wrap history.pushState/replaceState
+  //     eagerPatch: true,                 // start buffering immediately (default: off)
+  //     captureGraphQLOperation: true,    // extract operationName from POST bodies (default: off)
+  //   };
   const cfg = window.__uirefConfig || {};
   const patchConsole = cfg.patchConsole !== false;
   const patchErrors  = cfg.patchErrors  !== false;
   const patchNetwork = cfg.patchNetwork !== false;
   const patchNavigation = cfg.patchNavigation !== false;
+  // Lazy capture: patches install on page load so stack shape is stable, but
+  // no events flow into the buffer until the user activates the picker once.
+  // This makes the Chrome-Web-Store story straightforward: "no data capture
+  // without explicit user action." Users who want pre-activation history can
+  // set eagerPatch: true in their app bootstrap.
+  let captureEnabled = !!cfg.eagerPatch;
+  document.addEventListener('uiref:enable-capture', () => { captureEnabled = true; });
 
   const MAX_ARG_LEN = 200;
 
@@ -41,6 +53,7 @@
   }
 
   function emit(type, detail) {
+    if (!captureEnabled) return; // lazy-capture gate
     try {
       document.dispatchEvent(new CustomEvent(type, { detail: { ...detail, t: Date.now() } }));
     } catch {}
@@ -88,10 +101,12 @@
   }
 
   // Extract just the GraphQL operationName from a request body if present.
-  // This is the ONLY body field we capture (it's not sensitive — it's visible
-  // in any DevTools Network tab — and makes repeated calls to /graphql
-  // distinguishable). No variables, no query, no other body content.
+  // OFF BY DEFAULT. Users opt in via window.__uirefConfig.captureGraphQLOperation.
+  // The field is non-sensitive (visible in any DevTools Network tab) but reading
+  // request bodies — even this one specific field — is the kind of thing that
+  // reviewers notice. Keeping it opt-in makes the privacy story unambiguous.
   function extractGqlOperationName(body) {
+    if (!cfg.captureGraphQLOperation) return null;
     if (!body) return null;
     try {
       if (typeof body === 'string' && body.length < 200_000 && body[0] === '{') {

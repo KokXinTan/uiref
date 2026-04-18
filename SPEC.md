@@ -105,11 +105,27 @@ Each array entry has a `t` field (epoch millis). The `window_ms` at the top indi
 
 **Privacy note:** `events.network` captures URL, method, status, duration, and optionally `operation` (the GraphQL `operationName` field, extracted from POST bodies specifically for disambiguating repeated calls to `/graphql` endpoints). **No request bodies, response bodies, headers, payloads, or query variables are captured.** The GraphQL operation name is a safe exception because it's already visible to anyone with DevTools access and is not sensitive. `events.console` captures stringified arguments truncated to 200 chars each.
 
-### Opting out of event patches
+### How event capture is scoped
 
-The extension patches `console.*`, `window.onerror` + `unhandledrejection`, `fetch` + `XMLHttpRequest`, and `history.pushState/replaceState` in the page's main world. These wrappers show up at the top of stack traces when they're invoked (e.g., the uiref console wrapper appears above the "real" caller in `console.warn()` traces).
+Two defensive defaults keep the privacy story clear:
 
-If that noise is a problem while debugging framework warnings, opt out specific patches by setting `window.__uirefConfig` **before** the extension runs (earliest reasonable place: `app.html` or the root entry script):
+**1. Lazy capture (default).** The extension's main-world script *installs* the `console.*` / `fetch` / `XMLHttpRequest` / `history.*` patches on page load, but they remain **no-ops** until the user explicitly activates the picker on that tab. No events enter the buffer, no data is captured, no events are emitted — the patches exist only so that stack traces are consistent after activation. Once the picker is activated once on a tab, buffering continues for the life of the tab.
+
+**Opt in to eager capture** (buffer from page load, so pre-click history is fuller) by setting in your app bootstrap:
+
+```js
+window.__uirefConfig = { eagerPatch: true };
+```
+
+**2. GraphQL operation name is opt-in.** To disambiguate repeated calls to `/graphql`, the extension can extract just the `operationName` field from POST bodies. This is the **only** body content ever read. It is off by default. Opt in with:
+
+```js
+window.__uirefConfig = { captureGraphQLOperation: true };
+```
+
+### Opting out of individual patches
+
+If the patches' stack-trace presence is noisy while debugging framework warnings, opt out specific wrappers:
 
 ```js
 window.__uirefConfig = {
@@ -120,7 +136,7 @@ window.__uirefConfig = {
 };
 ```
 
-Disabling a patch means the corresponding events won't be captured in uirefs for that page. All patches are enabled by default.
+All patches are enabled (but dormant) by default. Disabling a patch means the corresponding events won't be captured in uirefs for that page.
 
 ## Store snapshot opt-in
 

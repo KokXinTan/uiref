@@ -116,8 +116,22 @@
   // =============================================================
   // PICKER ACTIVATION
   // =============================================================
+  // Tell inject.js (main world) to start buffering events. This is a one-shot
+  // signal; after first activation on a tab, events keep flowing for the rest
+  // of the tab's lifetime. Before first activation, inject.js's patches are
+  // no-ops — cleaner Chrome Web Store story.
+  let captureEnabledSignalSent = false;
+  function enableEventCapture() {
+    if (captureEnabledSignalSent) return;
+    captureEnabledSignalSent = true;
+    try {
+      document.dispatchEvent(new CustomEvent('uiref:enable-capture'));
+    } catch {}
+  }
+
   async function activatePicker(newMode = 'single') {
     ensureRoot();
+    enableEventCapture();
     mode = newMode;
     if (mode === 'workflow') {
       // Resume existing workflow if one is in progress, otherwise start new

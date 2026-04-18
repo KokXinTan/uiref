@@ -2,11 +2,13 @@
 
 # uiref
 
-**Point at any UI element in your running web app. Send a precise, structured reference to Claude Code (or any AI coding assistant).**
+**Stop saying "which button?" to Claude.**
 
-Stop saying "fix this button" and hoping the AI guesses right. Click the element; the AI gets the exact source file, line, component name, and a screenshot.
+Click any UI element in your running web app → Claude gets the exact source file, line, component, and surrounding context. Built for dense dashboards, unfamiliar codebases, and multi-component bug reports where "fix this" is ambiguous.
 
-[Install](#install) · [How it works](#how-it-works) · [Spec](./SPEC.md) · [Troubleshooting](#troubleshooting)
+Chrome extension + Svelte / React / Vue / Angular build plugins. Local-only. MIT.
+
+[Install](#install) · [How it works](#how-it-works) · [Who is this for?](#who-is-this-for) · [Spec](./SPEC.md) · [Troubleshooting](#troubleshooting)
 
 ![status](https://img.shields.io/badge/status-alpha-orange) ![license](https://img.shields.io/badge/license-MIT-blue) ![framework](https://img.shields.io/badge/svelte%20%7C%20react%20%7C%20vue%20%7C%20angular-supported-green)
 
@@ -14,9 +16,28 @@ Stop saying "fix this button" and hoping the AI guesses right. Click the element
 
 ---
 
+## Who is this for?
+
+**You'll get 10x value if:**
+
+- You work on a **dense app** — dashboards, admin panels, design systems with 50+ components
+- Your codebase has **many similar elements** — a dozen chart widgets, identical-looking buttons in different contexts, nested wrapper components
+- You use **third-party component libraries** (shadcn, bits-ui, Radix, MUI) and open them rarely
+- You ship **SvelteKit / Next.js / Nuxt / Angular** apps where route state matters
+- You **debug with GraphQL** and need to know which operations a click fires
+- You want **PMs, designers, or QA** to point at UI in bug reports without knowing the code
+
+**You probably don't need this if:**
+
+- Your app is a small landing page with obvious component names
+- You're writing components you know cold — typing `src/Header.tsx` is faster than the capture workflow
+- Your changes are "make it red" level — capture overhead ≈ chat overhead
+
+**The honest caveat:** uiref tells Claude *where*, never *what*. You still articulate the change in chat. This is the design: location from the tool, intent from the conversation. Tools that try to infer intent from clicks guess badly.
+
 ## The problem
 
-When you tell an AI coding assistant "fix this button" or "change that header," it has to guess which component you mean. In a real codebase with dozens of similar elements, the guess is often wrong — you spend your turn explaining location instead of intent.
+When you tell an AI coding assistant "fix this button" or "change that header," it has to guess which component you mean. In a codebase with dozens of generic wrappers (`Card`, `EchartsWrapper`, `Button`), the guess is often wrong — you spend your turn explaining location instead of intent.
 
 Sending a screenshot doesn't fix this. Even frontier vision models drift 5–30 pixels on coordinate regression, and a screenshot shows the AI what the element *looks like*, not which source file *rendered* it.
 
@@ -65,6 +86,16 @@ claude: I see you pointed at <SaveButton> at
         src/components/SaveButton.tsx:42. Applying now.
         [edits the exact file]
 ```
+
+### Where it really shines
+
+**Dense dashboards.** You have a water-consumption dashboard with 15 widget types. "Fix this chart" is ambiguous. Click it → Claude gets `WaterConsumptionChart.svelte:42` and the parent `InsightsPage.svelte:120` that configures it. Zero back-and-forth.
+
+**Third-party components.** "Why is this popover cropped?" on a `bits-ui` dropdown you've never opened. uiref resolves to the wrapper + your usage site + computed styles. Claude finds the overflow issue without grep.
+
+**Bug reports with receipts.** Workflow mode captures N clicks, the events (console errors, failed network requests, SPA navigations) between them, and the URL at each step. "This broke somewhere during the signup flow" becomes a replayable, timestamped JSON Claude can reason about directly.
+
+**Cross-role collaboration.** PMs and designers can capture and hand off without touching code.
 
 ## What you get
 

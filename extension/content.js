@@ -431,7 +431,7 @@
     // First time setup: ask user to pick a directory
     showToast({
       title: 'uiref needs an inbox folder',
-      detail: 'Pick ~/.claude/uiref-inbox/ (one-time setup)',
+      detail: 'Pick ~/uiref-inbox/ (create it first in your home folder)',
     });
     const picked = await window.showDirectoryPicker({
       mode: 'readwrite',
@@ -451,6 +451,24 @@
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(uiref, null, 2) + '\n');
     await writable.close();
+    // Prune stale files — keep the inbox from accumulating forever.
+    pruneInbox(dir).catch(() => {}); // fire and forget
+  }
+
+  // Delete uiref files older than 1 hour so the inbox doesn't accumulate.
+  const PRUNE_MAX_AGE_MS = 60 * 60 * 1000;
+  async function pruneInbox(dir) {
+    const cutoff = Date.now() - PRUNE_MAX_AGE_MS;
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      if (!name.endsWith('.uiref.json')) continue;
+      try {
+        const file = await handle.getFile();
+        if (file.lastModified < cutoff) {
+          await dir.removeEntry(name);
+        }
+      } catch {}
+    }
   }
 
   // =============================================================

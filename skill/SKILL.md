@@ -1,11 +1,11 @@
 ---
 name: uiref
-description: Use whenever the user references a specific UI element, component, button, view, section, or anything visual in their running web app. Reads the most recent `.uiref.json` file from `~/.claude/uiref-inbox/` to get the authoritative source file, line, and component name the user is pointing at. Eliminates ambiguity in "fix this button" / "change this header" / "modify that card" type requests.
+description: Use whenever the user references a specific UI element, component, button, view, section, or anything visual in their running web app. Reads the most recent `.uiref.json` file from `~/uiref-inbox/` to get the authoritative source file, line, and component name the user is pointing at. Eliminates ambiguity in "fix this button" / "change this header" / "modify that card" type requests.
 ---
 
 # uiref — pointing at UI → knowing the code
 
-The user has (or should have) the uiref Chrome extension installed. When they want to reference a UI element, they click on it in their browser; the extension writes a JSON file to `~/.claude/uiref-inbox/<timestamp>.uiref.json` containing:
+The user has (or should have) the uiref Chrome extension installed. When they want to reference a UI element, they click on it in their browser; the extension writes a JSON file to `~/uiref-inbox/<timestamp>.uiref.json` containing:
 
 - `target.file` — the exact source file (relative to project root)
 - `target.line` — the line number where the component is defined
@@ -36,7 +36,7 @@ Do NOT trigger for:
 **1. Check the inbox.**
 
 ```bash
-ls -t ~/.claude/uiref-inbox/*.uiref.json 2>/dev/null | head -1
+ls -t ~/uiref-inbox/*.uiref.json 2>/dev/null | head -1
 ```
 
 If empty or the most recent file is older than ~10 minutes, the user probably hasn't captured a uiref recently. Ask them: "Open the uiref Chrome extension and click the element you're referring to — I'll pick it up from your inbox."
@@ -61,13 +61,15 @@ Or, if the user already stated their intent:
 - If `target.file` is null (unresolved), fall back to greping the codebase for `element.text` and `element.tag`. Propose candidate files and ask the user to confirm.
 - If `screenshot` is present, you may view it using the Read tool to understand the visual context.
 
-**5. After making the change, optionally clean up.**
+**5. After using the uiref, delete it.**
 
-Delete the processed uiref file so it doesn't linger:
+Always delete the uiref file after you've used it, so the inbox stays clean and the same capture isn't re-consumed on the next turn:
 
 ```bash
-rm ~/.claude/uiref-inbox/<the-file-you-used>.uiref.json
+rm ~/uiref-inbox/<the-file-you-used>.uiref.json
 ```
+
+The extension also auto-prunes files older than 1 hour on each capture, so even if cleanup is missed, the inbox won't grow forever.
 
 Or, if the user commonly captures many uirefs, leave the file and simply reference the most recent one next time.
 
@@ -103,7 +105,7 @@ If the user asks "how does uiref work?" or "how do I capture elements?":
    - React: `@uiref/babel-plugin-react` (Babel plugin)
    - Vue: `@uiref/vue` (Vite plugin)
    - Angular: `@uiref/angular` (Vite plugin)
-3. On first capture, grant the extension permission to write to `~/.claude/uiref-inbox/`.
+3. On first capture, grant the extension permission to write to `~/uiref-inbox/`.
 4. Press Cmd+Shift+C (Mac) or Ctrl+Shift+C (Win/Linux) on any page, click an element, done.
 
 ## Do not

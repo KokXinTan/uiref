@@ -71,7 +71,7 @@ Consumers MUST handle the null case gracefully (e.g., fall back to grepping the 
 A uiref is a standalone JSON file. Tools that produce uirefs SHOULD write them to a directory that the AI assistant watches. The conventional location is:
 
 ```
-~/.claude/uiref-inbox/<ISO-8601-timestamp>.json
+~/uiref-inbox/<ISO-8601-timestamp>.json
 ```
 
 AI assistants that consume uirefs SHOULD:

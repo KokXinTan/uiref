@@ -17,7 +17,7 @@ Vision-based "send Claude a screenshot" doesn't fix this — even frontier visio
 3. Install the **Claude Skill** so Claude auto-checks your uiref inbox.
 4. Press **⌘⇧C** (⌃⇧C on Win/Linux), click the element, done.
 
-The extension writes a JSON file containing the exact source file, line, and component name to `~/.claude/uiref-inbox/`. Next time you ask Claude "fix this," it reads the most recent file and knows exactly what you meant.
+The extension writes a JSON file containing the exact source file, line, and component name to `~/uiref-inbox/`. Next time you ask Claude "fix this," it reads the most recent file and knows exactly what you meant.
 
 ```
 you:    *clicks Save button in browser*
@@ -93,7 +93,7 @@ cp -r skill/ ~/.claude/skills/uiref/
 - Visit any page served by your dev server with the build plugin active.
 - Press ⌘⇧C (Mac) or Ctrl+Shift+C (Win/Linux).
 - Click any element.
-- Extension prompts once: "pick an inbox folder" — choose `~/.claude/uiref-inbox/` (create it if needed).
+- Extension prompts once: "pick an inbox folder" — choose `~/uiref-inbox/` (create it if needed).
 - You'll see `<SaveButton> → Claude` toast.
 - Switch to Claude Code, say "change this to the danger variant."
 - Claude reads the inbox, acknowledges the target, edits the right file.
@@ -117,7 +117,7 @@ cp -r skill/ ~/.claude/skills/uiref/
 │    • screenshots the element        │
 │    • writes uiref/v1 JSON           │
 └────────────────┬────────────────────┘
-                 │  ~/.claude/uiref-inbox/
+                 │  ~/uiref-inbox/
                  │  2026-04-16T14-22-00.uiref.json
                  ▼
 ┌─────────────────────────────────────┐

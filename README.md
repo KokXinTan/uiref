@@ -196,6 +196,30 @@ mkdir -p ~/uiref-inbox
 
 On first capture, the extension will prompt you to pick this folder. Select `~/uiref-inbox`. The extension remembers the choice, so you only do this once.
 
+### 5. (Recommended) Enable richest capture on local dev
+
+By default, the extension only starts buffering events (console logs, errors, network) once you activate the picker on a tab — this keeps the extension review-safe for general-audience publishing. For your own projects, you probably want **eager buffering** (full pre-click history) and **GraphQL operation-name extraction** (so repeated calls to `/graphql` are distinguishable).
+
+Add to your app's bootstrap (dev-only, zero production impact):
+
+```js
+if (import.meta.env.DEV) {
+  window.__uirefConfig = {
+    eagerPatch: true,                 // buffer events from page load
+    captureGraphQLOperation: true,    // extract GraphQL operationName from POST bodies
+  };
+}
+```
+
+Put it where your app initializes:
+- **SvelteKit** — top of `src/routes/+layout.svelte` `<script>` block, or an inline script in `src/app.html`
+- **React (Vite)** — top of `src/main.tsx`, before `createRoot()`
+- **Next.js** — top of `app/layout.tsx` (client component) or in a `<Script>` in `app.html`
+- **Vue** — top of `src/main.ts`, before `app.mount()`
+- **Angular** — top of `src/main.ts`, before `bootstrapApplication()`
+
+See [full config options](./SPEC.md#how-event-capture-is-scoped) in the spec.
+
 ## Your first capture
 
 1. Start your dev server — verify the app runs and reloads normally.

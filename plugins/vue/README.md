@@ -25,6 +25,21 @@ export default {
 
 The plugin runs in dev only by default (`NODE_ENV !== 'production'`).
 
+### Recommended: enable richest event capture
+
+Add to the top of `src/main.ts` (before `app.mount()`):
+
+```js
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__uirefConfig = {
+    eagerPatch: true,                 // buffer events from page load
+    captureGraphQLOperation: true,    // extract GraphQL operationName
+  };
+}
+```
+
+Without this, the uiref Chrome extension only starts buffering console logs / errors / network requests once you activate the picker on a tab. With it, you get the full 30-second pre-click history (critical for "this broke right before I clicked" scenarios).
+
 ## Options
 
 ```js

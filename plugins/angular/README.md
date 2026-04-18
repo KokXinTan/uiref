@@ -44,6 +44,21 @@ Becomes:
 
 For inline templates in `@Component({ template: '...' })`, same injection on the first element.
 
+## Recommended: enable richest event capture
+
+Add to the top of `src/main.ts` (before `bootstrapApplication()`):
+
+```js
+if (!window.location.hostname.includes('production')) {
+  (window as any).__uirefConfig = {
+    eagerPatch: true,                 // buffer events from page load
+    captureGraphQLOperation: true,    // extract GraphQL operationName
+  };
+}
+```
+
+Without this, the uiref Chrome extension only starts buffering console logs / errors / network requests once you activate the picker on a tab.
+
 ## Known limitations (v0.1)
 
 - Only injects on the first element of each template. Nested components rely on the Chrome extension walking up the DOM.

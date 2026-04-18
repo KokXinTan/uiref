@@ -219,7 +219,35 @@ mkdirSync(inbox, { recursive: true });
 ok(`Inbox folder ready: ${C.dim}${inbox}${C.reset}`);
 
 // ---------------------------------------------------------------------------
-// 6. Next steps
+// 6. Optional dev-mode config hint
+// ---------------------------------------------------------------------------
+log('');
+log(`${C.bold}Optional — for richest capture on your local dev:${C.reset}`);
+log('');
+log(`Add this snippet to your app's bootstrap (before your app mounts):`);
+log('');
+
+const entryHint = {
+  svelte: `${C.dim}  // In src/routes/+layout.svelte's <script> or src/app.html${C.reset}`,
+  react:  `${C.dim}  // In src/main.tsx, app/layout.tsx, or _app.tsx${C.reset}`,
+  vue:    `${C.dim}  // In src/main.ts (before app.mount())${C.reset}`,
+  angular:`${C.dim}  // In src/main.ts (before bootstrapApplication())${C.reset}`,
+}[framework];
+log(entryHint);
+log('');
+log(`  ${C.dim}if (import.meta.env.DEV) {${C.reset}`);
+log(`  ${C.dim}  window.__uirefConfig = {${C.reset}`);
+log(`  ${C.dim}    eagerPatch: true,              ${C.reset}${C.dim}// buffer events from page load${C.reset}`);
+log(`  ${C.dim}    captureGraphQLOperation: true, ${C.reset}${C.dim}// extract GraphQL opName${C.reset}`);
+log(`  ${C.dim}  };${C.reset}`);
+log(`  ${C.dim}}${C.reset}`);
+log('');
+log(`${C.dim}Without this, events (console/errors/network) are only captured after`);
+log(`you first activate the picker on a tab. The snippet is dev-gated so it`);
+log(`has zero production impact.${C.reset}`);
+
+// ---------------------------------------------------------------------------
+// 7. Next steps
 // ---------------------------------------------------------------------------
 log('');
 log(`${C.bold}${C.green}uiref installed.${C.reset} One more step — the Chrome extension:`);

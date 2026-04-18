@@ -34,7 +34,7 @@
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       transition: background 0.1s;
     }
     .btn:hover { background: #7c8af5; }
@@ -50,6 +50,11 @@
       border: 1px solid #3a3a5e;
     }
     .btn-workflow:hover { background: #2a2a3e; border-color: #6c7bf0; }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-row .btn { flex: 1; margin-bottom: 0; }
     .row {
       display: flex;
       justify-content: space-between;
@@ -65,6 +70,35 @@
       height: 1px;
       background: #2e2e3e;
       margin: 10px 0;
+    }
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #7a7a8e;
+      margin: 6px 0 8px;
+    }
+    .status-card {
+      background: #1a1a24;
+      border: 1px solid #2e2e3e;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .status-card.active { border-color: #6c7bf0; }
+    .status-card.paused { border-color: #a78bfa; }
+    .status-card-title {
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .status-card-title.active { color: #a5b3ff; }
+    .status-card-title.paused { color: #c4b5fd; }
+    .status-card-detail {
+      font-size: 11px;
+      color: #7a7a8e;
+      line-height: 1.4;
     }
     .shortcut {
       background: #22222e;
@@ -88,10 +122,8 @@
   <div class="logo">uiref</div>
   <div class="tagline">point at UI, send to Claude</div>
 
-  <button class="btn" id="btn-activate">Pick one element</button>
-  <button class="btn btn-workflow" id="btn-activate-workflow">Pick multiple (workflow)</button>
-  <div class="divider"></div>
-  <button class="btn btn-secondary" id="btn-setup">Change inbox folder</button>
+  <!-- Rendered dynamically based on workflow state -->
+  <div id="controls"></div>
 
   <div class="divider"></div>
 
@@ -105,7 +137,6 @@
   </div>
 
   <div class="hint">
-    Point the picker at an element, click, and the reference is written to your inbox folder. Claude Code (with the uiref skill installed) picks it up on the next turn.<br><br>
     <a href="https://github.com/KokXinTan/uiref" target="_blank">Docs & Claude Skill →</a>
   </div>
 

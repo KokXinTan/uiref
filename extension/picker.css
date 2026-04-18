@@ -5,14 +5,17 @@
   position: fixed;
   inset: 0;
   z-index: 2147483647; /* top of the world */
-  pointer-events: none;
+  pointer-events: none; /* ALWAYS — lets scroll/hover/click pass through to page */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   font-size: 12px;
 }
 
-#uiref-root.active {
-  pointer-events: auto;
-  cursor: crosshair;
+/* Crosshair cursor globally while picker is active in SINGLE mode.
+   In workflow mode the user may want to type / click normally, so we keep
+   native cursors. Applied to <html> so it wins without !important on most sites. */
+html.uiref-picking-single,
+html.uiref-picking-single * {
+  cursor: crosshair !important;
 }
 
 #uiref-highlight {

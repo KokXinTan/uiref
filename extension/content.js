@@ -94,23 +94,45 @@
     if (active) {
       updateHint();
       updateCounter();
+      syncState();
       return;
     }
     active = true;
     root.classList.add('active');
     root.classList.toggle('workflow-mode', mode === 'workflow');
-    // In workflow mode, let clicks pass through to the page so the user can
-    // log in, type into inputs, navigate, etc. In single mode, intercept
-    // normally so the click doesn't trigger the underlying element.
-    root.style.pointerEvents = mode === 'workflow' ? 'none' : 'auto';
+    // Scroll and hover must pass through to the page, so root stays
+    // pointer-events: none (set in CSS). Clicks are intercepted via the
+    // document-level capture listener, which lets us preventDefault in
+    // single mode or let them flow through in workflow mode.
+    // Crosshair indicator only in single mode — workflow users may want
+    // to type/interact normally.
+    if (mode === 'single') {
+      document.documentElement.classList.add('uiref-picking-single');
+    } else {
+      document.documentElement.classList.remove('uiref-picking-single');
+    }
     pausedBadge.style.display = 'none';
     updateHint();
     updateCounter();
+    syncState();
     document.addEventListener('mousemove', onMouseMove, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('scroll', positionHighlight, true);
     window.addEventListener('resize', positionHighlight, true);
+  }
+
+  // Tell the background script what state to reflect on the tray badge.
+  function syncState() {
+    const state =
+      active && mode === 'workflow' ? 'workflow' :
+      active && mode === 'single'   ? 'picking' :
+      !active && workflow && workflow.steps.length > 0 ? 'paused' :
+      'idle';
+    const count = workflow ? workflow.steps.length : 0;
+    try {
+      chrome.runtime.sendMessage({ type: 'uiref:set-state', state, count });
+    } catch {}
   }
 
   // Pause the picker but keep workflow state so the user can navigate,
@@ -119,9 +141,10 @@
     if (mode !== 'workflow' || !workflow) return;
     deactivatePicker();
     showPausedBadge();
+    syncState(); // badge → paused
     showToast({
       title: 'Workflow paused',
-      detail: `${workflow.steps.length} step${workflow.steps.length === 1 ? '' : 's'} saved. Resume anytime.`,
+      detail: `${workflow.steps.length} step${workflow.steps.length === 1 ? '' : 's'} saved. Click the uiref icon to resume.`,
     });
   }
 
@@ -144,7 +167,8 @@
     if (!active) return;
     active = false;
     hoverEl = null;
-    root.classList.remove('active');
+    root.classList.remove('active', 'workflow-mode');
+    document.documentElement.classList.remove('uiref-picking-single');
     highlight.style.display = 'none';
     label.style.display = 'none';
     hint.style.display = 'none';
@@ -154,6 +178,7 @@
     document.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('scroll', positionHighlight, true);
     window.removeEventListener('resize', positionHighlight, true);
+    syncState();
   }
 
   function updateHint() {
@@ -494,6 +519,7 @@
       await saveWorkflow();
       updateCounter();
       updateHint(); // refresh the "Send N steps to Claude" button
+      syncState();  // update the tray badge count
       showToast({
         title: `+ step ${workflow.steps.length}: <${uiref.target.component || uiref.element.tag}>`,
         detail: uiref.target.file ? `${uiref.target.file}:${uiref.target.line}` : 'unresolved',
@@ -727,8 +753,22 @@
     if (msg?.type === 'uiref:activate-picker') {
       activatePicker(msg.mode || 'single');
       sendResponse({ ok: true });
+    } else if (msg?.type === 'uiref:workflow-action') {
+      // Popup → content: perform a workflow action
+      switch (msg.action) {
+        case 'send': finishWorkflow(); break;
+        case 'hide': pauseWorkflow(); break;
+        case 'resume': resumeWorkflow(); break;
+        case 'cancel':
+          workflow = null;
+          clearStoredWorkflow();
+          deactivatePicker();
+          showToast({ title: 'Workflow cancelled' });
+          break;
+      }
+      sendResponse({ ok: true });
     }
-    return false; // synchronous
+    return false;
   });
 
   // On page load, if there's a paused workflow in storage, show the resume badge
@@ -739,6 +779,9 @@
       workflow = stored;
       ensureRoot();
       showPausedBadge();
+      syncState(); // let the tray badge reflect paused state
+    } else {
+      syncState(); // idle
     }
   })();
 })();

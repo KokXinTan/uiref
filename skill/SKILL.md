@@ -18,6 +18,7 @@ Each file contains:
 - `element.tag` / `element.text` / `element.attributes` — what the DOM looked like
 - `element.computed_styles` — current CSS values (color, background, font, padding, etc.) — useful for "why is this blue?" / "make this match" questions
 - `props_at_render` — component props at click time for React/Vue/Angular (null for Svelte). Shape: `{ framework, props }`. Useful for "why is this disabled" / "change the variant" questions
+- `events` — recent browser activity (last ~30s): console logs, uncaught errors, network requests, SPA navigations. Critical when the user says "this broke" / "why did this fail" — check `events.errors` and failed `events.network` entries
 - `screenshot` — a base64 PNG of the element itself (you can view it via Read)
 
 A `uiref-flow` wraps multiple `uiref` objects in `steps[].target`, with a flow-level `user_intent` that often describes the overall goal.
@@ -83,6 +84,11 @@ Or, if the user already stated their intent:
 - Before picking the file to edit, look at `ancestors[0]` (if present). If the user said "the chart" and target is `EchartsWrapper`, the parent (e.g. `WaterConsumptionChart.svelte`) is probably what they want to modify.
 - If `target.file` is null (unresolved), fall back to greping the codebase for `element.text` and `element.tag`, or reading the screenshot if one is present. Propose candidates and ask the user to confirm.
 - If `screenshot` is present, view it via the Read tool — for ambiguous targets (like a generic chart canvas), the screenshot visually shows which instance the user picked.
+- **If `events` is present and the user mentions a bug / broken / failing / error**, read `events.errors` (uncaught exceptions) and failed `events.network` entries (status >= 400 or `ok: false`) FIRST — these usually point directly to the cause. Common pattern:
+  - `events.errors[0].message` contains a real error → find where in the source it's thrown
+  - `events.network` has a 500 or failed fetch → the button's handler made a backend call that failed
+  - `events.console` has `level: "warn"` or `"error"` related messages → framework or runtime warnings
+- Cite the relevant event to the user: "I see the network request to `/api/charts/water` returned 500 just before you clicked — the button handler is calling a broken endpoint."
 
 **For a uiref-flow:**
 - Each step's `target` is a full uiref — source file, line, component, screenshot.

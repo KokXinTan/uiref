@@ -1,0 +1,149 @@
+// uiref — main-world injected script
+//
+// Runs in the page's MAIN world (unlike content.js which runs in the isolated
+// world) so it can patch global APIs (console, fetch, XHR, onerror). Patches
+// are minimal: they call the original unchanged and emit a CustomEvent for the
+// isolated-world content script to buffer. Events cross the world boundary
+// because `document` is shared.
+//
+// Guard against multiple injections (Chrome sometimes re-injects on SPA nav).
+
+(function () {
+  if (window.__uirefInjected_main) return;
+  window.__uirefInjected_main = true;
+
+  const MAX_ARG_LEN = 200;
+
+  function safeStringify(v) {
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    const t = typeof v;
+    if (t === 'string') return v.length > MAX_ARG_LEN ? v.slice(0, MAX_ARG_LEN) + '…' : v;
+    if (t === 'number' || t === 'boolean') return String(v);
+    if (t === 'function') return '[Function]';
+    if (v instanceof Error) return `${v.name}: ${v.message}`;
+    try {
+      const s = JSON.stringify(v);
+      return s.length > MAX_ARG_LEN ? s.slice(0, MAX_ARG_LEN) + '…' : s;
+    } catch {
+      return '[Object]';
+    }
+  }
+
+  function emit(type, detail) {
+    try {
+      document.dispatchEvent(new CustomEvent(type, { detail: { ...detail, t: Date.now() } }));
+    } catch {}
+  }
+
+  // ----- Console -----
+  ['log', 'info', 'warn', 'error'].forEach((level) => {
+    const orig = console[level];
+    if (!orig) return;
+    console[level] = function (...args) {
+      emit('uiref:console', { level, args: args.map(safeStringify) });
+      return orig.apply(console, args);
+    };
+  });
+
+  // ----- Uncaught errors -----
+  window.addEventListener('error', (ev) => {
+    emit('uiref:error', {
+      message: ev.message,
+      filename: ev.filename || null,
+      line: ev.lineno || null,
+      column: ev.colno || null,
+      stack: ev.error?.stack ? String(ev.error.stack).slice(0, 1200) : null,
+    });
+  }, true);
+
+  window.addEventListener('unhandledrejection', (ev) => {
+    const reason = ev.reason;
+    emit('uiref:error', {
+      message: reason?.message || safeStringify(reason),
+      stack: reason?.stack ? String(reason.stack).slice(0, 1200) : null,
+      kind: 'unhandledrejection',
+    });
+  });
+
+  // ----- Fetch -----
+  const origFetch = window.fetch;
+  if (origFetch) {
+    window.fetch = function (input, init) {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+      const start = performance.now();
+      try {
+        const p = origFetch.apply(this, arguments);
+        p.then(
+          (response) => {
+            emit('uiref:network', {
+              method, url,
+              status: response.status,
+              ok: response.ok,
+              duration_ms: Math.round(performance.now() - start),
+            });
+          },
+          (err) => {
+            emit('uiref:network', {
+              method, url,
+              status: null,
+              ok: false,
+              error: err?.message || String(err),
+              duration_ms: Math.round(performance.now() - start),
+            });
+          },
+        );
+        return p;
+      } catch (err) {
+        emit('uiref:network', {
+          method, url, status: null, ok: false,
+          error: err?.message || String(err),
+          duration_ms: Math.round(performance.now() - start),
+        });
+        throw err;
+      }
+    };
+  }
+
+  // ----- XMLHttpRequest -----
+  const OrigXHR = window.XMLHttpRequest;
+  if (OrigXHR) {
+    const origOpen = OrigXHR.prototype.open;
+    const origSend = OrigXHR.prototype.send;
+    OrigXHR.prototype.open = function (method, url) {
+      this.__uirefMethod = method;
+      this.__uirefUrl = url;
+      return origOpen.apply(this, arguments);
+    };
+    OrigXHR.prototype.send = function () {
+      const start = performance.now();
+      const method = this.__uirefMethod || 'GET';
+      const url = this.__uirefUrl || '';
+      this.addEventListener('loadend', () => {
+        emit('uiref:network', {
+          method: method.toUpperCase(), url,
+          status: this.status || null,
+          ok: this.status >= 200 && this.status < 400,
+          duration_ms: Math.round(performance.now() - start),
+        });
+      });
+      return origSend.apply(this, arguments);
+    };
+  }
+
+  // ----- SPA navigation -----
+  const origPush = history.pushState;
+  const origReplace = history.replaceState;
+  history.pushState = function () {
+    emit('uiref:navigate', { from: location.pathname, kind: 'push' });
+    return origPush.apply(this, arguments);
+  };
+  history.replaceState = function () {
+    emit('uiref:navigate', { from: location.pathname, kind: 'replace' });
+    return origReplace.apply(this, arguments);
+  };
+  window.addEventListener('popstate', () => {
+    emit('uiref:navigate', { to: location.pathname, kind: 'pop' });
+  });
+})();

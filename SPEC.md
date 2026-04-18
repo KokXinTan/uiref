@@ -48,6 +48,7 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 | `ancestors`        | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null`. |
 | `element`          | object  | yes      | What the DOM element looks like. See below. |
 | `props_at_render`  | object  | no       | Framework-resolved component props at click time: `{ framework: "react"\|"vue"\|"angular", props: {...} }`. Null if not resolvable (Svelte, production builds without framework debug info). |
+| `events`           | object  | no       | Recent console logs, uncaught errors, network requests, and SPA navigations from the last ~30 seconds. See below. Null if nothing happened recently. |
 | `screenshot`       | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
 | `user_intent`      | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time. |
 
@@ -70,6 +71,34 @@ Consumers MUST handle the null case gracefully (e.g., fall back to grepping the 
 | `attributes`      | object  | no       | Key-value map of DOM attributes (class, id, data-*, etc.). |
 | `dom_path`        | string  | no       | CSS selector path from `body` to the element, e.g., `body > main > form > button.primary`. |
 | `computed_styles` | object  | no       | Curated set of computed CSS values (color, background, font, padding, etc.). Only populated values are included. |
+
+### `events` object
+
+A snapshot of recent browser activity captured from the page's main world. Useful for debugging "this broke when I clicked X" scenarios where the state that produced the bug is not visible in the DOM alone.
+
+```json
+{
+  "window_ms": 30000,
+  "console": [
+    { "level": "error", "args": ["Failed to load config", "NetworkError"], "t": 1713422340000 },
+    { "level": "log", "args": ["[auth] user signed in"], "t": 1713422339800 }
+  ],
+  "errors": [
+    { "message": "Cannot read properties of undefined (reading 'id')", "filename": "app.js", "line": 412, "column": 15, "stack": "...", "t": 1713422340500 }
+  ],
+  "network": [
+    { "method": "GET", "url": "/api/charts/water", "status": 500, "ok": false, "duration_ms": 230, "t": 1713422340100 },
+    { "method": "POST", "url": "/api/track", "status": 204, "ok": true, "duration_ms": 18, "t": 1713422339950 }
+  ],
+  "navigations": [
+    { "from": "/login", "kind": "push", "t": 1713422330000 }
+  ]
+}
+```
+
+Each array entry has a `t` field (epoch millis). The `window_ms` at the top indicates the lookback window — typically 30 seconds.
+
+**Privacy note:** `events.network` captures URL, method, status, and duration — **not** request/response bodies, headers, or payloads. `events.console` captures stringified arguments truncated to 200 chars each. No sensitive data is captured beyond what the page itself logs publicly.
 
 ## Delivery convention
 

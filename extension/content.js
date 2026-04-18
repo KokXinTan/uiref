@@ -17,6 +17,49 @@
   let inboxHandle = null; // FileSystemDirectoryHandle, persisted across sessions in IndexedDB
 
   // =============================================================
+  // EVENT BUFFER — populated by inject.js (main world). Captures
+  // console logs, errors, network requests, and SPA navigations so
+  // they can be included in uirefs for debugging context.
+  // =============================================================
+  const EV_BUFFER_SIZE = 60;
+  const events = {
+    console: [],  // { level, args[], t }
+    errors: [],   // { message, filename, line, column, stack, t, kind? }
+    network: [],  // { method, url, status, ok, duration_ms, error?, t }
+    navigations: [], // { from?, to?, kind, t }
+  };
+
+  function pushEvent(bucket, data) {
+    const arr = events[bucket];
+    arr.push(data);
+    if (arr.length > EV_BUFFER_SIZE) arr.shift();
+  }
+
+  document.addEventListener('uiref:console', (e) => pushEvent('console', e.detail));
+  document.addEventListener('uiref:error', (e) => pushEvent('errors', e.detail));
+  document.addEventListener('uiref:network', (e) => pushEvent('network', e.detail));
+  document.addEventListener('uiref:navigate', (e) => pushEvent('navigations', e.detail));
+
+  // Take a recent slice (last N seconds) of each buffer for inclusion in a uiref.
+  function snapshotEvents(windowMs = 30_000) {
+    const cutoff = Date.now() - windowMs;
+    const filter = (arr) => arr.filter((ev) => ev.t >= cutoff);
+    const consoleArr = filter(events.console);
+    const errArr = filter(events.errors);
+    const netArr = filter(events.network);
+    const navArr = filter(events.navigations);
+    // Skip entirely if nothing happened recently
+    if (!consoleArr.length && !errArr.length && !netArr.length && !navArr.length) return null;
+    return {
+      window_ms: windowMs,
+      console: consoleArr,
+      errors: errArr,
+      network: netArr,
+      navigations: navArr,
+    };
+  }
+
+  // =============================================================
   // CROSS-PAGE WORKFLOW PERSISTENCE
   // =============================================================
   // Workflow state persists in chrome.storage.local so users can capture on
@@ -472,6 +515,7 @@
         computed_styles: collectComputedStyles(el),
       },
       props_at_render: collectPropsAtRender(el),
+      events: snapshotEvents(),
       screenshot: elementShot,
       user_intent: null,
     };

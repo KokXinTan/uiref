@@ -21,17 +21,27 @@
   //     eagerPatch: true,                 // start buffering immediately (default: off)
   //     captureGraphQLOperation: true,    // extract operationName from POST bodies (default: off)
   //   };
-  const cfg = window.__uirefConfig || {};
-  const patchConsole = cfg.patchConsole !== false;
-  const patchErrors  = cfg.patchErrors  !== false;
-  const patchNetwork = cfg.patchNetwork !== false;
-  const patchNavigation = cfg.patchNavigation !== false;
+  // Read config at LOAD time for static decisions (which patches to install).
+  // The user's app bootstrap (hooks.client.ts, main.ts, etc.) typically runs
+  // AFTER inject.js, so the config object might not exist yet. Default to
+  // installing all patches — they're no-ops until enabled anyway.
+  const cfgAtLoad = window.__uirefConfig || {};
+  const patchConsole = cfgAtLoad.patchConsole !== false;
+  const patchErrors  = cfgAtLoad.patchErrors  !== false;
+  const patchNetwork = cfgAtLoad.patchNetwork !== false;
+  const patchNavigation = cfgAtLoad.patchNavigation !== false;
+
+  // Dynamic config accessor — re-reads window.__uirefConfig on each call so
+  // users who set the config LATER (e.g. SvelteKit hooks.client.ts, React
+  // main.tsx) still get their settings applied.
+  function getCfg() {
+    return window.__uirefConfig || {};
+  }
+
   // Lazy capture: patches install on page load so stack shape is stable, but
-  // no events flow into the buffer until the user activates the picker once.
-  // This makes the Chrome-Web-Store story straightforward: "no data capture
-  // without explicit user action." Users who want pre-activation history can
-  // set eagerPatch: true in their app bootstrap.
-  let captureEnabled = !!cfg.eagerPatch;
+  // no events flow into the buffer until the user activates the picker once —
+  // OR the user has set eagerPatch in their config (re-read dynamically).
+  let captureEnabled = !!cfgAtLoad.eagerPatch;
   document.addEventListener('uiref:enable-capture', () => { captureEnabled = true; });
 
   const MAX_ARG_LEN = 200;
@@ -53,6 +63,8 @@
   }
 
   function emit(type, detail) {
+    // Re-check eagerPatch dynamically so a late-loaded config still works
+    if (!captureEnabled && getCfg().eagerPatch) captureEnabled = true;
     if (!captureEnabled) return; // lazy-capture gate
     try {
       document.dispatchEvent(new CustomEvent(type, { detail: { ...detail, t: Date.now() } }));
@@ -106,7 +118,8 @@
   // request bodies — even this one specific field — is the kind of thing that
   // reviewers notice. Keeping it opt-in makes the privacy story unambiguous.
   function extractGqlOperationName(body) {
-    if (!cfg.captureGraphQLOperation) return null;
+    // Re-read config dynamically — user's late-set __uirefConfig still takes effect
+    if (!getCfg().captureGraphQLOperation) return null;
     if (!body) return null;
     try {
       if (typeof body === 'string' && body.length < 200_000 && body[0] === '{') {

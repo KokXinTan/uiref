@@ -66,6 +66,22 @@
     });
   });
 
+  // Extract just the GraphQL operationName from a request body if present.
+  // This is the ONLY body field we capture (it's not sensitive — it's visible
+  // in any DevTools Network tab — and makes repeated calls to /graphql
+  // distinguishable). No variables, no query, no other body content.
+  function extractGqlOperationName(body) {
+    if (!body) return null;
+    try {
+      if (typeof body === 'string' && body.length < 200_000 && body[0] === '{') {
+        const parsed = JSON.parse(body);
+        const name = parsed?.operationName;
+        if (typeof name === 'string' && name.length <= 100) return name;
+      }
+    } catch {}
+    return null;
+  }
+
   // ----- Fetch -----
   const origFetch = window.fetch;
   if (origFetch) {
@@ -73,12 +89,14 @@
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
       const start = performance.now();
+      const opName = extractGqlOperationName(init && init.body);
       try {
         const p = origFetch.apply(this, arguments);
         p.then(
           (response) => {
             emit('uiref:network', {
               method, url,
+              operation: opName,
               status: response.status,
               ok: response.ok,
               duration_ms: Math.round(performance.now() - start),
@@ -87,6 +105,7 @@
           (err) => {
             emit('uiref:network', {
               method, url,
+              operation: opName,
               status: null,
               ok: false,
               error: err?.message || String(err),
@@ -97,7 +116,8 @@
         return p;
       } catch (err) {
         emit('uiref:network', {
-          method, url, status: null, ok: false,
+          method, url, operation: opName,
+          status: null, ok: false,
           error: err?.message || String(err),
           duration_ms: Math.round(performance.now() - start),
         });
@@ -116,13 +136,15 @@
       this.__uirefUrl = url;
       return origOpen.apply(this, arguments);
     };
-    OrigXHR.prototype.send = function () {
+    OrigXHR.prototype.send = function (body) {
       const start = performance.now();
       const method = this.__uirefMethod || 'GET';
       const url = this.__uirefUrl || '';
+      const opName = extractGqlOperationName(body);
       this.addEventListener('loadend', () => {
         emit('uiref:network', {
           method: method.toUpperCase(), url,
+          operation: opName,
           status: this.status || null,
           ok: this.status >= 200 && this.status < 400,
           duration_ms: Math.round(performance.now() - start),

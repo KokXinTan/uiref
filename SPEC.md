@@ -42,7 +42,7 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 |--------------------|---------|----------|-------------|
 | `format`           | string  | yes      | Always `"uiref/v1"` for this schema version. |
 | `captured_at`      | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
-| `page`             | object  | no       | Page context at capture time: `url`, `pathname`, `title`. |
+| `page`             | object  | no       | Page context: `url`, `pathname`, `title` at capture time. In workflow mode, if a click caused a navigation within ~800ms, also includes `url_after` and `pathname_after` (the post-navigation URL). |
 | `viewport`         | object  | no       | `width`, `height`, `dpr`, `theme` ("dark" / "light" / null). |
 | `target`           | object  | yes      | The innermost component whose DOM contains the clicked element. See below. |
 | `ancestors`        | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null`. |
@@ -72,6 +72,9 @@ Consumers MUST handle the null case gracefully (e.g., fall back to grepping the 
 | `attributes`      | object  | no       | Key-value map of DOM attributes (class, id, data-*, etc.). |
 | `dom_path`        | string  | no       | CSS selector path from `body` to the element, e.g., `body > main > form > button.primary`. |
 | `computed_styles` | object  | no       | Curated set of computed CSS values (color, background, font, padding, etc.). Only populated values are included. |
+| `input_state`     | object  | no       | Present when the element is `<input>` / `<textarea>` / `<select>`. Fields: `value`, `placeholder`, `name`, `type`, `label`, `required`, `disabled`. Values of `type="password"` fields are captured as `[redacted]` regardless of content. |
+
+Text resolution (the `text` field) tries, in order: `textContent` → `aria-label` → `title` → `alt` → inner `<img alt>` → inner `<svg><title>` → inner `<use href="#icon-name">`. This is important for icon-only buttons and accessibility-first UIs where the visible "label" is not the literal text node.
 
 ### `events` object
 
@@ -88,7 +91,8 @@ A snapshot of recent browser activity captured from the page's main world. Usefu
     { "message": "Cannot read properties of undefined (reading 'id')", "filename": "app.js", "line": 412, "column": 15, "stack": "...", "t": 1713422340500 }
   ],
   "network": [
-    { "method": "GET", "url": "/api/charts/water", "status": 500, "ok": false, "duration_ms": 230, "t": 1713422340100 },
+    { "method": "GET",  "url": "/api/charts/water", "status": 500, "ok": false, "duration_ms": 230, "t": 1713422340100 },
+    { "method": "POST", "url": "/graphql", "operation": "GetSiteWater", "status": 200, "ok": true, "duration_ms": 95, "t": 1713422340050 },
     { "method": "POST", "url": "/api/track", "status": 204, "ok": true, "duration_ms": 18, "t": 1713422339950 }
   ],
   "navigations": [
@@ -99,7 +103,7 @@ A snapshot of recent browser activity captured from the page's main world. Usefu
 
 Each array entry has a `t` field (epoch millis). The `window_ms` at the top indicates the lookback window — typically 30 seconds.
 
-**Privacy note:** `events.network` captures URL, method, status, and duration — **not** request/response bodies, headers, or payloads. `events.console` captures stringified arguments truncated to 200 chars each. No sensitive data is captured beyond what the page itself logs publicly.
+**Privacy note:** `events.network` captures URL, method, status, duration, and optionally `operation` (the GraphQL `operationName` field, extracted from POST bodies specifically for disambiguating repeated calls to `/graphql` endpoints). **No request bodies, response bodies, headers, payloads, or query variables are captured.** The GraphQL operation name is a safe exception because it's already visible to anyone with DevTools access and is not sensitive. `events.console` captures stringified arguments truncated to 200 chars each.
 
 ## Store snapshot opt-in
 

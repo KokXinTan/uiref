@@ -99,7 +99,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'uiref:popup-workflow-action') {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (tab?.id) {
-        chrome.tabs.sendMessage(tab.id, { type: 'uiref:workflow-action', action: msg.action }).catch(() => {});
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'uiref:workflow-action',
+          action: msg.action,
+          intent: msg.intent || null,
+        }).catch(() => {});
       }
     });
     sendResponse({ ok: true });

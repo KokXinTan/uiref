@@ -537,10 +537,11 @@
       ancestors: parentChain.length ? parentChain : null,
       element: {
         tag: el.tagName.toLowerCase(),
-        text: (el.textContent || '').trim().slice(0, 200) || null,
+        text: resolveElementText(el),
         attributes: collectAttrs(el),
         dom_path: computeDomPath(el),
         computed_styles: collectComputedStyles(el),
+        input_state: collectInputState(el),
       },
       props_at_render: collectPropsAtRender(el),
       store_snapshot: storeSnapshot,
@@ -711,6 +712,7 @@
 
   async function captureStep(el) {
     try {
+      const urlBefore = location.href;
       const uiref = await buildUiref(el);
       workflow.steps.push(uiref);
       await saveWorkflow();
@@ -721,6 +723,17 @@
         title: `+ step ${workflow.steps.length}: <${uiref.target.component || uiref.element.tag}>`,
         detail: `${uiref.target.file ? uiref.target.file + ':' + uiref.target.line : 'unresolved'} · ${isMac() ? '⌘Z' : 'Ctrl+Z'} to undo`,
       });
+      // If the click causes navigation, the URL will change. Wait a bit,
+      // then update the step's page with url_after so the AI can see
+      // "this click went from X to Y" without inferring.
+      setTimeout(() => {
+        const urlAfter = location.href;
+        if (urlAfter !== urlBefore && uiref.page) {
+          uiref.page.url_after = urlAfter;
+          uiref.page.pathname_after = location.pathname;
+          saveWorkflow().catch(() => {});
+        }
+      }, 800);
     } catch (err) {
       console.error('[uiref] step capture failed', err);
       showToast({ title: 'Step capture failed', detail: err.message || String(err), error: true });
@@ -768,7 +781,7 @@
     return 'ref';
   }
 
-  async function finishWorkflow() {
+  async function finishWorkflow(userIntent = null) {
     if (!workflow || !workflow.steps.length) return;
     try {
       const startedAtMs = new Date(workflow.startedAt).getTime();
@@ -777,7 +790,7 @@
         captured_at: workflow.startedAt,
         finished_at: new Date().toISOString(),
         title: null,
-        user_intent: null,
+        user_intent: userIntent || null,
         steps: workflow.steps.map((uiref, i) => ({
           order: i + 1,
           action: inferAction(uiref),
@@ -817,6 +830,98 @@
       if (name.startsWith('data-uiref-')) continue; // skip our own build-plugin attrs
       out[name] = value;
     }
+    return Object.keys(out).length ? out : null;
+  }
+
+  // Resolve a human-readable label for the element. Tries, in order:
+  //   1. textContent (existing behavior)
+  //   2. aria-label
+  //   3. title attribute
+  //   4. alt attribute (for <img>)
+  //   5. Inner <img alt="..."> — icon images in a button
+  //   6. Inner <svg><title>...</title></svg> — icon SVGs
+  //   7. Inner <use href="#icon-name"> — sprite-sheet icons
+  // Returns the first non-empty hit, trimmed and capped at 200 chars. May be null.
+  function resolveElementText(el) {
+    const direct = (el.textContent || '').trim();
+    if (direct) return direct.slice(0, 200);
+
+    const aria = el.getAttribute && el.getAttribute('aria-label');
+    if (aria && aria.trim()) return aria.trim().slice(0, 200);
+
+    const title = el.getAttribute && el.getAttribute('title');
+    if (title && title.trim()) return title.trim().slice(0, 200);
+
+    const alt = el.getAttribute && el.getAttribute('alt');
+    if (alt && alt.trim()) return alt.trim().slice(0, 200);
+
+    // Inner <img alt=...>
+    const innerImg = el.querySelector && el.querySelector('img[alt]');
+    if (innerImg) {
+      const a = innerImg.getAttribute('alt');
+      if (a && a.trim()) return a.trim().slice(0, 200);
+    }
+
+    // Inner SVG <title>
+    const svgTitle = el.querySelector && el.querySelector('svg > title');
+    if (svgTitle && svgTitle.textContent?.trim()) {
+      return svgTitle.textContent.trim().slice(0, 200);
+    }
+
+    // Sprite-sheet icon: <use href="#icon-home"> or xlink:href
+    const use = el.querySelector && el.querySelector('svg use[href], svg use');
+    if (use) {
+      const href = use.getAttribute('href') || use.getAttribute('xlink:href');
+      if (href && href.trim()) return `[icon ${href.trim().replace(/^#/, '')}]`.slice(0, 200);
+    }
+
+    return null;
+  }
+
+  // For form fields, capture the value/placeholder/label/name — useful context
+  // even when the user hasn't typed. If the user HAS typed, value carries it.
+  function collectInputState(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') return null;
+
+    const out = {
+      value: el.value || null,
+      placeholder: el.getAttribute && el.getAttribute('placeholder'),
+      name: el.getAttribute && el.getAttribute('name'),
+      type: el.getAttribute && el.getAttribute('type'),
+      required: el.required || false,
+      disabled: el.disabled || false,
+    };
+
+    // Try to find an associated <label>: either wrapping, or via for= / id
+    let labelText = null;
+    const id = el.id;
+    if (id) {
+      const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      if (lbl) labelText = (lbl.textContent || '').trim();
+    }
+    if (!labelText) {
+      let cur = el.parentElement;
+      while (cur) {
+        if (cur.tagName === 'LABEL') {
+          labelText = (cur.textContent || '').trim();
+          break;
+        }
+        cur = cur.parentElement;
+      }
+    }
+    if (labelText) out.label = labelText.slice(0, 200);
+
+    // Input type "password" — don't capture value even if set (safety)
+    if (out.type === 'password') out.value = '[redacted]';
+
+    // Truncate value
+    if (typeof out.value === 'string' && out.value.length > 200) {
+      out.value = out.value.slice(0, 200) + '…';
+    }
+
+    // Clean out nulls to keep JSON compact
+    Object.keys(out).forEach((k) => out[k] == null && delete out[k]);
     return Object.keys(out).length ? out : null;
   }
 
@@ -994,7 +1099,7 @@
     } else if (msg?.type === 'uiref:workflow-action') {
       // Popup → content: perform a workflow action
       switch (msg.action) {
-        case 'send': finishWorkflow(); break;
+        case 'send': finishWorkflow(msg.intent); break;
         case 'hide': pauseWorkflow(); break;
         case 'resume': resumeWorkflow(); break;
         case 'undo': undoLastStep(); break;

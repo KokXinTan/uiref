@@ -50,8 +50,8 @@ async function updateInboxStatus() {
 }
 
 // Send a workflow action via the background worker to the active tab.
-async function workflowAction(action) {
-  await chrome.runtime.sendMessage({ type: 'uiref:popup-workflow-action', action });
+async function workflowAction(action, intent = null) {
+  await chrome.runtime.sendMessage({ type: 'uiref:popup-workflow-action', action, intent });
   window.close();
 }
 
@@ -84,11 +84,39 @@ async function render() {
     card.appendChild(detail);
     controls.appendChild(card);
 
-    // Primary: Send to Claude
+    // Optional intent input — seamless annotation before sending.
+    // Empty = send as before; typed = attached as user_intent in the flow.
+    const intentWrap = document.createElement('div');
+    intentWrap.style.marginBottom = '8px';
+    const intentLabel = document.createElement('div');
+    intentLabel.textContent = 'What to do with this? (optional)';
+    intentLabel.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;color:#7a7a8e;margin:4px 0 4px;';
+    const intentInput = document.createElement('input');
+    intentInput.type = 'text';
+    intentInput.placeholder = 'e.g. "refactor these into one component"';
+    intentInput.style.cssText = 'width:100%;background:#1a1a24;border:1px solid #2e2e3e;color:#d4d4dc;padding:7px 10px;border-radius:5px;font-size:12px;font-family:inherit;';
+    intentInput.addEventListener('focus', () => { intentInput.style.borderColor = '#6c7bf0'; });
+    intentInput.addEventListener('blur', () => { intentInput.style.borderColor = '#2e2e3e'; });
+    intentWrap.appendChild(intentLabel);
+    intentWrap.appendChild(intentInput);
+    controls.appendChild(intentWrap);
+
+    // Primary: Send to Claude — reads intent from the input if provided
     const sendBtn = document.createElement('button');
     sendBtn.className = 'btn';
     sendBtn.textContent = `Send ${stepCount} step${stepCount === 1 ? '' : 's'} to Claude`;
-    sendBtn.addEventListener('click', () => workflowAction('send'));
+    sendBtn.addEventListener('click', () => {
+      const intent = intentInput.value.trim() || null;
+      workflowAction('send', intent);
+    });
+    // Enter inside the intent input also sends
+    intentInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const intent = intentInput.value.trim() || null;
+        workflowAction('send', intent);
+      }
+    });
     controls.appendChild(sendBtn);
 
     // Row: Resume / Hide

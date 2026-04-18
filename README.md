@@ -132,7 +132,16 @@ On first capture the browser will ask you to pick an inbox folder once; choose `
 
 ### Manual install (if you prefer)
 
-If you'd rather not use the setup CLI, install the plugin yourself:
+If you'd rather not use the setup CLI, install the plugin yourself. You'll also need to copy the Claude Skill manually (the CLI does this for you):
+
+```bash
+mkdir -p ~/.claude/skills/uiref
+curl -fsSL https://raw.githubusercontent.com/KokXinTan/uiref/main/skill/SKILL.md \
+  -o ~/.claude/skills/uiref/SKILL.md
+mkdir -p ~/uiref-inbox
+```
+
+Then pick your framework:
 
 <details>
 <summary><strong>Svelte 4 / Svelte 5 (SvelteKit)</strong></summary>

@@ -18,6 +18,7 @@ Each file contains:
 - `element.tag` / `element.text` / `element.attributes` — what the DOM looked like
 - `element.computed_styles` — current CSS values (color, background, font, padding, etc.) — useful for "why is this blue?" / "make this match" questions
 - `props_at_render` — component props at click time for React/Vue/Angular (null for Svelte). Shape: `{ framework, props }`. Useful for "why is this disabled" / "change the variant" questions
+- `store_snapshot` — developer-opted-in app store state (e.g. Redux/Zustand/Pinia/Svelte). Null unless the project has `window.__uirefStore` set up. When present, this is the authoritative source for "what state was the app in?"
 - `events` — recent browser activity (last ~30s): console logs, uncaught errors, network requests, SPA navigations. Critical when the user says "this broke" / "why did this fail" — check `events.errors` and failed `events.network` entries
 - `screenshot` — a base64 PNG of the element itself (you can view it via Read)
 

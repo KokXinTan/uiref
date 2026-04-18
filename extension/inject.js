@@ -132,6 +132,41 @@
     };
   }
 
+  // ----- Store snapshot (opt-in via window.__uirefStore) -----
+  // Developers expose their store state at dev time:
+  //   if (import.meta.env.DEV) window.__uirefStore = () => myStore.getState();
+  // The extension requests the current snapshot via a CustomEvent and we
+  // respond with the serialized state. Works for any library because the
+  // developer controls the accessor.
+  document.addEventListener('uiref:request-store', () => {
+    let snapshot = null;
+    try {
+      const src = window.__uirefStore;
+      if (typeof src === 'function') snapshot = src();
+      else if (src && typeof src === 'object') snapshot = src;
+    } catch (err) {
+      snapshot = { __uiref_error: err?.message || String(err) };
+    }
+    // Serialize carefully — caller is isolated-world JS, so keep to plain JSON
+    let serialized = null;
+    if (snapshot !== null && snapshot !== undefined) {
+      try {
+        serialized = JSON.parse(JSON.stringify(snapshot, (k, v) => {
+          if (typeof v === 'function') return '[Function]';
+          if (v instanceof Element) return '[DOMElement]';
+          if (v instanceof Map) return Object.fromEntries(v);
+          if (v instanceof Set) return Array.from(v);
+          return v;
+        }));
+      } catch (err) {
+        serialized = { __uiref_error: 'Could not serialize store: ' + (err?.message || err) };
+      }
+    }
+    try {
+      document.dispatchEvent(new CustomEvent('uiref:store-response', { detail: serialized }));
+    } catch {}
+  });
+
   // ----- SPA navigation -----
   const origPush = history.pushState;
   const origReplace = history.replaceState;

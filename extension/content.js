@@ -485,11 +485,39 @@
   // =============================================================
   // CAPTURE
   // =============================================================
+  // Ask the page (via main-world inject.js) for its store snapshot. Developers
+  // opt in by setting `window.__uirefStore = () => ...` in dev mode.
+  function collectStoreSnapshot() {
+    return new Promise((resolve) => {
+      let done = false;
+      const handler = (e) => {
+        if (done) return;
+        done = true;
+        document.removeEventListener('uiref:store-response', handler);
+        resolve(e.detail ?? null);
+      };
+      document.addEventListener('uiref:store-response', handler);
+      try {
+        document.dispatchEvent(new CustomEvent('uiref:request-store'));
+      } catch {}
+      // Guard — if no one responds within 300ms, skip
+      setTimeout(() => {
+        if (done) return;
+        done = true;
+        document.removeEventListener('uiref:store-response', handler);
+        resolve(null);
+      }, 300);
+    });
+  }
+
   // Build a uiref from an element (used by both single capture and workflow step)
   async function buildUiref(el) {
     const src = resolveSource(el);
     const rect = el.getBoundingClientRect();
-    const shotResp = await chrome.runtime.sendMessage({ type: 'uiref:capture-tab' });
+    const [shotResp, storeSnapshot] = await Promise.all([
+      chrome.runtime.sendMessage({ type: 'uiref:capture-tab' }),
+      collectStoreSnapshot(),
+    ]);
     let elementShot = null;
     if (shotResp?.ok) {
       elementShot = await cropScreenshot(shotResp.dataUrl, rect);
@@ -515,6 +543,7 @@
         computed_styles: collectComputedStyles(el),
       },
       props_at_render: collectPropsAtRender(el),
+      store_snapshot: storeSnapshot,
       events: snapshotEvents(),
       screenshot: elementShot,
       user_intent: null,

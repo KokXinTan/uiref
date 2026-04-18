@@ -48,6 +48,7 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 | `ancestors`        | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null`. |
 | `element`          | object  | yes      | What the DOM element looks like. See below. |
 | `props_at_render`  | object  | no       | Framework-resolved component props at click time: `{ framework: "react"\|"vue"\|"angular", props: {...} }`. Null if not resolvable (Svelte, production builds without framework debug info). |
+| `store_snapshot`   | object  | no       | Current store state at capture time. Populated only if the developer opts in via `window.__uirefStore` (see "Store snapshot opt-in" below). Framework-agnostic. |
 | `events`           | object  | no       | Recent console logs, uncaught errors, network requests, and SPA navigations from the last ~30 seconds. See below. Null if nothing happened recently. |
 | `screenshot`       | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
 | `user_intent`      | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time. |
@@ -99,6 +100,29 @@ A snapshot of recent browser activity captured from the page's main world. Usefu
 Each array entry has a `t` field (epoch millis). The `window_ms` at the top indicates the lookback window — typically 30 seconds.
 
 **Privacy note:** `events.network` captures URL, method, status, and duration — **not** request/response bodies, headers, or payloads. `events.console` captures stringified arguments truncated to 200 chars each. No sensitive data is captured beyond what the page itself logs publicly.
+
+## Store snapshot opt-in
+
+Universal store introspection (Redux / Zustand / Pinia / Svelte stores / Jotai / Valtio / custom) is impossible for a browser extension because each library exposes state differently — many not at all. Instead, uiref supports a one-line developer opt-in.
+
+In your app's dev entry point:
+
+```js
+// Expose your store for uiref captures (dev only).
+if (import.meta.env.DEV) {
+  window.__uirefStore = () => myStore.getState();
+}
+```
+
+The accessor can return any JSON-serializable value. Use cases:
+
+- **Single store:** `() => store.getState()` (Redux, Zustand)
+- **Multiple stores:** `() => ({ auth: authStore.get(), cart: cartStore.get() })`
+- **Slice of state:** `() => ({ user: authStore.user, route: router.pathname })` (only what's useful)
+- **Pinia:** `() => pinia.state.value`
+- **Svelte stores:** `() => ({ user: get(userStore), cart: get(cartStore) })` (using `get` from `svelte/store`)
+
+At capture time, the uiref extension calls `window.__uirefStore()` and includes the result as `store_snapshot` in the uiref. Functions, DOM elements, Maps, and Sets are serialized sensibly; circular references are broken. If nothing is exposed, `store_snapshot` is `null`.
 
 ## Delivery convention
 

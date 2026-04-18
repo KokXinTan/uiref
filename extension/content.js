@@ -451,15 +451,13 @@
     if (shotResp?.ok) {
       elementShot = await cropScreenshot(shotResp.dataUrl, rect);
     }
-    // Ancestor chain — the innermost match is target; the rest tell us which
-    // specific parent/page contains this instance (critical for generic
-    // wrappers like EchartsWrapper where the "which chart" info is one or
-    // more levels up).
     const ancestors = resolveAncestors(el);
     const parentChain = ancestors.slice(1); // exclude target itself
     return {
       format: 'uiref/v1',
       captured_at: new Date().toISOString(),
+      page: collectPageContext(),
+      viewport: collectViewport(),
       target: {
         file: src.file,
         line: src.line,
@@ -471,10 +469,152 @@
         text: (el.textContent || '').trim().slice(0, 200) || null,
         attributes: collectAttrs(el),
         dom_path: computeDomPath(el),
+        computed_styles: collectComputedStyles(el),
       },
+      props_at_render: collectPropsAtRender(el),
       screenshot: elementShot,
       user_intent: null,
     };
+  }
+
+  // Page context — URL, pathname, title. Helps pin down which route/page
+  // the element was on (useful for SvelteKit / Next.js / Nuxt apps).
+  function collectPageContext() {
+    try {
+      return {
+        url: location.href,
+        pathname: location.pathname,
+        title: document.title || null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Viewport + theme detection.
+  function collectViewport() {
+    const htmlClasses = document.documentElement.className || '';
+    const bodyClasses = document.body?.className || '';
+    let theme = null;
+    if (/\bdark\b/.test(htmlClasses) || /\bdark\b/.test(bodyClasses)) {
+      theme = 'dark';
+    } else if (/\blight\b/.test(htmlClasses) || /\blight\b/.test(bodyClasses)) {
+      theme = 'light';
+    } else if (window.matchMedia) {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      theme,
+    };
+  }
+
+  // Curated set of computed styles — the ones most useful for AI-driven
+  // styling edits. Skips inherited/defaulted values where possible by
+  // comparing against sensible defaults.
+  const STYLE_PROPS = [
+    'color', 'background-color', 'background-image',
+    'font-family', 'font-size', 'font-weight', 'line-height', 'text-align',
+    'display', 'position', 'flex-direction', 'align-items', 'justify-content',
+    'gap', 'padding', 'margin',
+    'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+    'border', 'border-radius', 'box-shadow',
+    'opacity', 'transform', 'transition',
+    'cursor', 'overflow', 'z-index',
+  ];
+  function collectComputedStyles(el) {
+    try {
+      const cs = window.getComputedStyle(el);
+      const out = {};
+      for (const prop of STYLE_PROPS) {
+        const val = cs.getPropertyValue(prop);
+        if (val && val !== 'none' && val !== 'normal' && val !== '0px' && val !== 'auto' && val !== '') {
+          out[prop] = val.trim();
+        }
+      }
+      return Object.keys(out).length ? out : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Framework-specific: props that were actually passed to the component
+  // at the time of the click. Hugely useful for "why is this disabled?" or
+  // "change the variant" — the AI sees the live prop values.
+  function collectPropsAtRender(el) {
+    // React: walk Fiber for memoizedProps of the owning component
+    const reactKey = Object.keys(el).find(
+      (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'),
+    );
+    if (reactKey) {
+      let fiber = el[reactKey];
+      while (fiber) {
+        if (typeof fiber.type === 'function' && fiber.memoizedProps) {
+          return { framework: 'react', props: safeSerializeProps(fiber.memoizedProps) };
+        }
+        fiber = fiber.return;
+      }
+    }
+    // Vue 3
+    let cur = el;
+    while (cur) {
+      const vnode = cur.__vueParentComponent;
+      if (vnode && vnode.props) {
+        return { framework: 'vue', props: safeSerializeProps(vnode.props) };
+      }
+      cur = cur.parentElement;
+    }
+    // Angular (Ivy)
+    if (typeof window.ng?.getComponent === 'function') {
+      try {
+        const comp = window.ng.getComponent(el) || window.ng.getOwningComponent(el);
+        if (comp) {
+          const shallow = {};
+          for (const k of Object.keys(comp)) {
+            const v = comp[k];
+            const t = typeof v;
+            if (v === null || t === 'string' || t === 'number' || t === 'boolean') {
+              shallow[k] = v;
+            }
+          }
+          if (Object.keys(shallow).length) {
+            return { framework: 'angular', props: shallow };
+          }
+        }
+      } catch {}
+    }
+    // Svelte 5 runes don't expose props introspection from outside reliably; skip.
+    return null;
+  }
+
+  // Shallow-serialize an arbitrary props object. Strips functions, DOM refs,
+  // and anything that can't safely round-trip through JSON.
+  function safeSerializeProps(raw) {
+    const out = {};
+    try {
+      for (const k of Object.keys(raw)) {
+        if (k === 'children') continue; // often massive
+        const v = raw[k];
+        const t = typeof v;
+        if (v === null) out[k] = null;
+        else if (t === 'string' || t === 'number' || t === 'boolean') out[k] = v;
+        else if (t === 'function') out[k] = '[Function]';
+        else if (Array.isArray(v)) out[k] = `[Array(${v.length})]`;
+        else if (t === 'object') {
+          // One-level shallow copy of simple-object props
+          try {
+            out[k] = JSON.parse(JSON.stringify(v, (key, val) =>
+              typeof val === 'function' ? '[Function]' : val,
+            ));
+          } catch {
+            out[k] = '[Object]';
+          }
+        }
+      }
+    } catch {}
+    return out;
   }
 
   async function capture(el) {

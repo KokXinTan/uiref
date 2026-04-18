@@ -13,7 +13,11 @@ The user has (or should have) the uiref Chrome extension installed. When they wa
 Each file contains:
 - `target.file` / `target.line` / `target.component` — the INNERMOST component (the DOM immediately containing the clicked element)
 - `ancestors` — ordered parent chain (inner → outer). Critical when `target` is a generic wrapper (like `EchartsWrapper`, `Card`, `Button`) and the "which one" context lives one or two levels up
+- `page` — `url`, `pathname`, `title` at capture time (tells you which route/page)
+- `viewport` — `width`, `height`, `dpr`, `theme` (`"dark"` / `"light"` / `null`) — useful for responsive/theme issues
 - `element.tag` / `element.text` / `element.attributes` — what the DOM looked like
+- `element.computed_styles` — current CSS values (color, background, font, padding, etc.) — useful for "why is this blue?" / "make this match" questions
+- `props_at_render` — component props at click time for React/Vue/Angular (null for Svelte). Shape: `{ framework, props }`. Useful for "why is this disabled" / "change the variant" questions
 - `screenshot` — a base64 PNG of the element itself (you can view it via Read)
 
 A `uiref-flow` wraps multiple `uiref` objects in `steps[].target`, with a flow-level `user_intent` that often describes the overall goal.

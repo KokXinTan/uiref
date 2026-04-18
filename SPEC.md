@@ -38,15 +38,18 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 
 ### Top-level
 
-| Field          | Type    | Required | Description |
-|----------------|---------|----------|-------------|
-| `format`       | string  | yes      | Always `"uiref/v1"` for this schema version. |
-| `captured_at`  | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
-| `target`       | object  | yes      | The innermost component whose DOM contains the clicked element. See below. |
-| `ancestors`    | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null` or omitted. |
-| `element`      | object  | yes      | What the DOM element looks like. See below. |
-| `screenshot`   | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
-| `user_intent`  | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time; the user types intent into the AI chat afterward. |
+| Field              | Type    | Required | Description |
+|--------------------|---------|----------|-------------|
+| `format`           | string  | yes      | Always `"uiref/v1"` for this schema version. |
+| `captured_at`      | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
+| `page`             | object  | no       | Page context at capture time: `url`, `pathname`, `title`. |
+| `viewport`         | object  | no       | `width`, `height`, `dpr`, `theme` ("dark" / "light" / null). |
+| `target`           | object  | yes      | The innermost component whose DOM contains the clicked element. See below. |
+| `ancestors`        | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null`. |
+| `element`          | object  | yes      | What the DOM element looks like. See below. |
+| `props_at_render`  | object  | no       | Framework-resolved component props at click time: `{ framework: "react"\|"vue"\|"angular", props: {...} }`. Null if not resolvable (Svelte, production builds without framework debug info). |
+| `screenshot`       | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
+| `user_intent`      | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time. |
 
 ### `target` object
 
@@ -60,12 +63,13 @@ Consumers MUST handle the null case gracefully (e.g., fall back to grepping the 
 
 ### `element` object
 
-| Field           | Type    | Required | Description |
-|-----------------|---------|----------|-------------|
-| `tag`           | string  | yes      | HTML tag name (`button`, `div`, etc.). |
-| `text`          | string  | no       | Inner text content of the element, if any. |
-| `attributes`    | object  | no       | Key-value map of DOM attributes (class, id, data-*, etc.). |
-| `dom_path`      | string  | no       | CSS selector path from `body` to the element, e.g., `body > main > form > button.primary`. |
+| Field             | Type    | Required | Description |
+|-------------------|---------|----------|-------------|
+| `tag`             | string  | yes      | HTML tag name (`button`, `div`, etc.). |
+| `text`            | string  | no       | Inner text content of the element, if any. |
+| `attributes`      | object  | no       | Key-value map of DOM attributes (class, id, data-*, etc.). |
+| `dom_path`        | string  | no       | CSS selector path from `body` to the element, e.g., `body > main > form > button.primary`. |
+| `computed_styles` | object  | no       | Curated set of computed CSS values (color, background, font, padding, etc.). Only populated values are included. |
 
 ## Delivery convention
 

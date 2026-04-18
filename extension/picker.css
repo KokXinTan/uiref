@@ -57,23 +57,28 @@
   color: #fbbf24;
 }
 
+/* Hint bar: the chrome is visually present but mouse-transparent, so you can
+   hover/click elements underneath. Only the buttons intercept events. */
 #uiref-hint {
   position: fixed;
-  top: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: #111118;
+  background: rgba(17, 17, 24, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #fff;
-  padding: 10px 16px;
+  padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-  display: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-family: -apple-system, sans-serif;
-  pointer-events: auto;
+  pointer-events: none;   /* background is hover-through */
   display: none;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  max-width: 540px;
 }
 #uiref-hint kbd {
   background: #22222e;
@@ -86,6 +91,7 @@
 }
 #uiref-hint .uiref-hint-text {
   pointer-events: none;
+  line-height: 1.35;
 }
 #uiref-hint .uiref-hint-button {
   background: #6c7bf0;
@@ -97,7 +103,8 @@
   font-weight: 500;
   cursor: pointer;
   font-family: -apple-system, sans-serif;
-  pointer-events: auto;
+  pointer-events: auto;   /* buttons ARE clickable */
+  white-space: nowrap;
 }
 #uiref-hint .uiref-hint-button:hover { background: #7c8af5; }
 #uiref-hint .uiref-hint-button.secondary {
@@ -142,41 +149,51 @@
 }
 #uiref-toast.error .uiref-toast-title { color: #e85454; }
 
+/* Step counter — tiny pill in the top-right, mouse-transparent. */
 #uiref-counter {
   position: fixed;
-  top: 16px;
-  right: 16px;
-  background: #6c7bf0;
+  top: 12px;
+  right: 12px;
+  background: rgba(108, 123, 240, 0.95);
   color: #fff;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(108, 123, 240, 0.4);
-  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(108, 123, 240, 0.35);
+  pointer-events: none;   /* hover-through */
   font-family: -apple-system, sans-serif;
   display: none;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Persistent "resume workflow" badge, shown when a workflow exists but the
-   picker is not active. Lets user navigate/log in, then click to continue. */
+   picker is not active. Compact, top-right (less conflict with footers /
+   chat widgets / cookie banners that usually live bottom-*). */
 #uiref-paused {
   position: fixed;
-  bottom: 16px;
-  left: 16px;
+  top: 12px;
+  right: 12px;
   background: #a78bfa;
   color: #111118;
   border: none;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(167, 139, 250, 0.5);
+  box-shadow: 0 2px 10px rgba(167, 139, 250, 0.45);
   pointer-events: auto;
   font-family: -apple-system, sans-serif;
   display: none;
   transition: transform 0.15s, background 0.15s;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 #uiref-paused:hover {
   background: #c4b5fd;

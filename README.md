@@ -106,25 +106,33 @@ claude: I see you pointed at <SaveButton> at
 - **Resilient to framework updates.** Data attributes are injected at build time, so the mechanism doesn't depend on React's `_debugSource` or Svelte's internal APIs (which break across versions).
 - **Open protocol.** Every component of the system — build plugins, extension, skill — is independent. The [`uiref/v1` JSON format](./SPEC.md) is the contract; any tool can produce or consume it.
 
-## Install
+## Install (60 seconds)
 
-### 1. Install the Chrome extension
-
-Until the extension is on the Chrome Web Store (see [Status](#status) below), install in developer mode:
+### Step 1 — Run the setup CLI in your project root
 
 ```bash
-git clone https://github.com/KokXinTan/uiref.git
+npx @uiref/setup
 ```
 
-Then in Chrome:
-1. Open `chrome://extensions/`
-2. Toggle **Developer mode** on (top-right)
-3. Click **Load unpacked**
-4. Select the `uiref/extension/` folder
+Auto-detects your framework (Svelte / React / Vue / Angular) and package manager, installs the matching `@uiref/*` plugin, patches your build config, copies the Claude Skill to `~/.claude/skills/uiref/`, and creates `~/uiref-inbox/`. ~20 seconds.
 
-### 2. Install the build plugin for your framework
+### Step 2 — Install the Chrome extension
 
-Pick one (or more) that match your projects:
+1. Download [`uiref-extension-v0.2.0.zip`](https://github.com/KokXinTan/uiref/releases/latest) from the latest release (~30 KB)
+2. Unzip it somewhere stable (e.g. `~/uiref-extension/`)
+3. Open `chrome://extensions/` → toggle **Developer mode** (top-right) → **Load unpacked** → select the unzipped folder
+
+(Chrome Web Store submission is in progress — once approved, this becomes a one-click install.)
+
+### Step 3 — Restart your dev server, start picking
+
+`⌘⇧C` (Mac) / `Ctrl+Shift+C` (Win/Linux) on any page you're dev-serving → click an element → the extension writes a uiref JSON to `~/uiref-inbox/`. Switch to Claude Code, say "fix this" — Claude reads the inbox automatically.
+
+On first capture the browser will ask you to pick an inbox folder once; choose `~/uiref-inbox/`.
+
+### Manual install (if you prefer)
+
+If you'd rather not use the setup CLI, install the plugin yourself:
 
 <details>
 <summary><strong>Svelte 4 / Svelte 5 (SvelteKit)</strong></summary>
@@ -174,6 +182,13 @@ export default {
 ```
 
 For Next.js / Create React App: see [`plugins/react/README.md`](./plugins/react/README.md).
+
+Also copy the Claude Skill:
+
+```bash
+mkdir -p ~/.claude/skills/uiref
+curl -fsSL https://raw.githubusercontent.com/KokXinTan/uiref/main/skill/SKILL.md -o ~/.claude/skills/uiref/SKILL.md
+```
 </details>
 
 <details>
@@ -297,7 +312,7 @@ You're on an older version of `@uiref/svelte` that didn't handle `{(v) => v}` st
 
 ### `pnpm install` fails or my dev server can't find `@uiref/svelte`
 
-If you installed via `file:` link, re-run `pnpm install` any time the local plugin changes. For regular use, wait for the npm publish (see [Status](#status)).
+Use the npm version (`npm install --save-dev @uiref/svelte`) unless you're actively developing the plugin itself.
 
 ### Claude doesn't detect my uiref after I capture
 
@@ -331,10 +346,15 @@ uiref/
 
 ## Status
 
-- **Extension:** alpha. Works locally, Chrome Web Store submission in progress (see [docs/chrome-web-store.md](./docs/chrome-web-store.md)).
-- **Svelte plugin:** dogfooded on a real SvelteKit app. Handles `<svelte:*>` elements, self-closing components, arrow-function attributes, and skips `node_modules/`.
-- **React, Vue, Angular plugins:** v0.1. Tested with synthetic fixtures. Expect edge cases on real codebases — please file issues.
-- **npm publish:** plugins currently installable via `file:` links or git. Publishing to npm after the Web Store submission.
+- **Extension:** v0.2.0 shipped as a GitHub release, [download the zip](https://github.com/KokXinTan/uiref/releases/latest). Chrome Web Store submission coming.
+- **npm packages:** all five live at 0.1.0 under the `@uiref` scope:
+  - [`@uiref/svelte`](https://www.npmjs.com/package/@uiref/svelte)
+  - [`@uiref/babel-plugin-react`](https://www.npmjs.com/package/@uiref/babel-plugin-react)
+  - [`@uiref/vue`](https://www.npmjs.com/package/@uiref/vue)
+  - [`@uiref/angular`](https://www.npmjs.com/package/@uiref/angular)
+  - [`@uiref/setup`](https://www.npmjs.com/package/@uiref/setup) (the `npx` installer)
+- **Svelte plugin:** dogfooded on a real SvelteKit app. Handles `<svelte:*>` elements, self-closing components, arrow-function attributes, tags every HTML element, and skips `node_modules/`.
+- **React, Vue, Angular plugins:** v0.1. Tested on synthetic fixtures. Expect edge cases on real codebases — please file issues.
 
 ## Alternatives considered
 

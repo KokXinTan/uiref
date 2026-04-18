@@ -72,7 +72,7 @@ The Chrome Web Store listing requires:
 
 ### Screenshots to capture
 
-Take these in a real app ([project] is a good candidate):
+Take these in a real React / Vue / Svelte / Angular app:
 
 1. **Picker active**: hover state showing the component name and source file floating over a button
 2. **Toast after capture**: the "✓ SaveButton → Claude" toast

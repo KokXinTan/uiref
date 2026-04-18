@@ -10,9 +10,39 @@
   // STATE
   // =============================================================
   let active = false;
+  let mode = 'single'; // 'single' | 'workflow'
   let hoverEl = null;
-  let root, highlight, label, hint, toast;
+  let workflow = null; // { id, steps: [uiref, uiref, ...], startedAt: string }
+  let root, highlight, label, hint, toast, counter, pausedBadge;
   let inboxHandle = null; // FileSystemDirectoryHandle, persisted across sessions in IndexedDB
+
+  // =============================================================
+  // CROSS-PAGE WORKFLOW PERSISTENCE
+  // =============================================================
+  // Workflow state persists in chrome.storage.local so users can capture on
+  // one page, navigate (log in, change route, reload), then resume.
+  const WF_KEY = 'uiref-active-workflow';
+
+  async function saveWorkflow() {
+    if (!workflow) {
+      await chrome.storage.local.remove(WF_KEY);
+      return;
+    }
+    await chrome.storage.local.set({ [WF_KEY]: workflow });
+  }
+
+  async function loadStoredWorkflow() {
+    try {
+      const obj = await chrome.storage.local.get(WF_KEY);
+      return obj?.[WF_KEY] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function clearStoredWorkflow() {
+    await chrome.storage.local.remove(WF_KEY);
+  }
 
   // =============================================================
   // DOM ROOT
@@ -27,30 +57,87 @@
     label.id = 'uiref-label';
     hint = document.createElement('div');
     hint.id = 'uiref-hint';
-    hint.innerHTML = 'Click an element to send to Claude. <kbd>Esc</kbd> to cancel. <kbd>↑</kbd>/<kbd>↓</kbd> parent/child.';
     toast = document.createElement('div');
     toast.id = 'uiref-toast';
+    counter = document.createElement('div');
+    counter.id = 'uiref-counter';
+    pausedBadge = document.createElement('button');
+    pausedBadge.id = 'uiref-paused';
+    pausedBadge.addEventListener('click', (e) => { e.stopPropagation(); resumeWorkflow(); });
     root.appendChild(highlight);
     root.appendChild(label);
     root.appendChild(hint);
     root.appendChild(toast);
+    root.appendChild(counter);
+    root.appendChild(pausedBadge);
     document.documentElement.appendChild(root);
   }
 
   // =============================================================
   // PICKER ACTIVATION
   // =============================================================
-  function activatePicker() {
-    if (active) return;
+  async function activatePicker(newMode = 'single') {
     ensureRoot();
+    mode = newMode;
+    if (mode === 'workflow') {
+      // Resume existing workflow if one is in progress, otherwise start new
+      if (!workflow) {
+        const stored = await loadStoredWorkflow();
+        workflow = stored || {
+          id: 'wf-' + Date.now().toString(36),
+          steps: [],
+          startedAt: new Date().toISOString(),
+        };
+        await saveWorkflow();
+      }
+    }
+    if (active) {
+      updateHint();
+      updateCounter();
+      return;
+    }
     active = true;
     root.classList.add('active');
-    hint.style.display = 'block';
+    root.classList.toggle('workflow-mode', mode === 'workflow');
+    // In workflow mode, let clicks pass through to the page so the user can
+    // log in, type into inputs, navigate, etc. In single mode, intercept
+    // normally so the click doesn't trigger the underlying element.
+    root.style.pointerEvents = mode === 'workflow' ? 'none' : 'auto';
+    pausedBadge.style.display = 'none';
+    updateHint();
+    updateCounter();
     document.addEventListener('mousemove', onMouseMove, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('scroll', positionHighlight, true);
     window.addEventListener('resize', positionHighlight, true);
+  }
+
+  // Pause the picker but keep workflow state so the user can navigate,
+  // log in, change routes, etc., and resume capturing after.
+  function pauseWorkflow() {
+    if (mode !== 'workflow' || !workflow) return;
+    deactivatePicker();
+    showPausedBadge();
+    showToast({
+      title: 'Workflow paused',
+      detail: `${workflow.steps.length} step${workflow.steps.length === 1 ? '' : 's'} saved. Resume anytime.`,
+    });
+  }
+
+  async function resumeWorkflow() {
+    if (!workflow) {
+      const stored = await loadStoredWorkflow();
+      if (!stored) return;
+      workflow = stored;
+    }
+    activatePicker('workflow');
+  }
+
+  function showPausedBadge() {
+    if (!pausedBadge || !workflow) return;
+    pausedBadge.textContent = `▶ Resume uiref workflow · ${workflow.steps.length} step${workflow.steps.length === 1 ? '' : 's'}`;
+    pausedBadge.style.display = 'block';
   }
 
   function deactivatePicker() {
@@ -61,11 +148,69 @@
     highlight.style.display = 'none';
     label.style.display = 'none';
     hint.style.display = 'none';
+    counter.style.display = 'none';
     document.removeEventListener('mousemove', onMouseMove, true);
     document.removeEventListener('click', onClick, true);
     document.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('scroll', positionHighlight, true);
     window.removeEventListener('resize', positionHighlight, true);
+  }
+
+  function updateHint() {
+    hint.innerHTML = '';
+    const text = document.createElement('span');
+    text.className = 'uiref-hint-text';
+    if (mode === 'workflow') {
+      const n = workflow?.steps.length || 0;
+      text.innerHTML =
+        n === 0
+          ? 'Click to add elements. Typing, form submits, links still work normally.'
+          : `${n} step${n === 1 ? '' : 's'} captured. Click to add more, or finish.`;
+      hint.appendChild(text);
+      if (n > 0) {
+        const sendBtn = document.createElement('button');
+        sendBtn.className = 'uiref-hint-button';
+        sendBtn.textContent = `Send ${n} step${n === 1 ? '' : 's'} to Claude`;
+        sendBtn.addEventListener('click', (e) => { e.stopPropagation(); finishWorkflow(); });
+        hint.appendChild(sendBtn);
+
+        const pauseBtn = document.createElement('button');
+        pauseBtn.className = 'uiref-hint-button secondary';
+        pauseBtn.textContent = 'Hide picker';
+        pauseBtn.title = 'Hide the picker overlay. Workflow stays saved — resume anytime.';
+        pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pauseWorkflow(); });
+        hint.appendChild(pauseBtn);
+      }
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'uiref-hint-button secondary';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        workflow = null;
+        await clearStoredWorkflow();
+        showToast({ title: 'Workflow cancelled' });
+        deactivatePicker();
+      });
+      hint.appendChild(cancelBtn);
+    } else {
+      text.textContent = 'Click an element to send to Claude.';
+      hint.appendChild(text);
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'uiref-hint-button secondary';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); deactivatePicker(); });
+      hint.appendChild(cancelBtn);
+    }
+    hint.style.display = 'flex';
+  }
+
+  function updateCounter() {
+    if (mode === 'workflow' && workflow) {
+      counter.textContent = `step ${workflow.steps.length + 1}${workflow.steps.length ? ` (press Enter to send ${workflow.steps.length} captured)` : ''}`;
+      counter.style.display = 'block';
+    } else {
+      counter.style.display = 'none';
+    }
   }
 
   // =============================================================
@@ -82,18 +227,43 @@
 
   function onClick(e) {
     if (!active) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (!hoverEl) return;
-    capture(hoverEl);
-    deactivatePicker();
+
+    // If the click landed inside our own UI (hint bar buttons, paused badge),
+    // don't intercept — let the button's own handler run.
+    if (root.contains(e.target)) return;
+
+    if (mode === 'workflow') {
+      // Through-click: capture the element but DO NOT preventDefault.
+      // The click continues to the underlying element so the user can type
+      // into inputs, submit forms, navigate via links, etc.
+      if (hoverEl) captureStep(hoverEl);
+      // Intentionally no preventDefault / stopPropagation here
+    } else {
+      // Single mode: intercept fully so we don't trigger the element.
+      e.preventDefault();
+      e.stopPropagation();
+      if (!hoverEl) return;
+      capture(hoverEl);
+      deactivatePicker();
+    }
   }
 
   function onKeyDown(e) {
     if (!active) return;
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (mode === 'workflow') {
+        workflow = null;
+        showToast({ title: 'Workflow cancelled' });
+      }
       deactivatePicker();
+    } else if (e.key === 'Enter' && mode === 'workflow') {
+      e.preventDefault();
+      if (workflow && workflow.steps.length > 0) {
+        finishWorkflow();
+      } else {
+        showToast({ title: 'Workflow empty', detail: 'Click at least one element first.' });
+      }
     } else if (e.key === 'ArrowUp' && hoverEl?.parentElement) {
       e.preventDefault();
       hoverEl = hoverEl.parentElement;
@@ -270,50 +440,111 @@
   // =============================================================
   // CAPTURE
   // =============================================================
+  // Build a uiref from an element (used by both single capture and workflow step)
+  async function buildUiref(el) {
+    const src = resolveSource(el);
+    const rect = el.getBoundingClientRect();
+    const shotResp = await chrome.runtime.sendMessage({ type: 'uiref:capture-tab' });
+    let elementShot = null;
+    if (shotResp?.ok) {
+      elementShot = await cropScreenshot(shotResp.dataUrl, rect);
+    }
+    return {
+      format: 'uiref/v1',
+      captured_at: new Date().toISOString(),
+      target: {
+        file: src.file,
+        line: src.line,
+        component: src.component,
+      },
+      element: {
+        tag: el.tagName.toLowerCase(),
+        text: (el.textContent || '').trim().slice(0, 200) || null,
+        attributes: collectAttrs(el),
+        dom_path: computeDomPath(el),
+      },
+      screenshot: elementShot,
+      user_intent: null,
+    };
+  }
+
   async function capture(el) {
     try {
-      const src = resolveSource(el);
-      const rect = el.getBoundingClientRect();
-
-      // Request a full-tab screenshot from background, then crop to element
-      const shotResp = await chrome.runtime.sendMessage({ type: 'uiref:capture-tab' });
-      let elementShot = null;
-      if (shotResp?.ok) {
-        elementShot = await cropScreenshot(shotResp.dataUrl, rect);
-      }
-
-      const uiref = {
-        format: 'uiref/v1',
-        captured_at: new Date().toISOString(),
-        target: {
-          file: src.file,
-          line: src.line,
-          component: src.component,
-        },
-        element: {
-          tag: el.tagName.toLowerCase(),
-          text: (el.textContent || '').trim().slice(0, 200) || null,
-          attributes: collectAttrs(el),
-          dom_path: computeDomPath(el),
-        },
-        screenshot: elementShot,
-        user_intent: null,
-      };
-
+      const uiref = await buildUiref(el);
       await writeToInbox(uiref);
+      const src = uiref.target;
       showToast({
-        title: src.component ? `<${src.component}> → Claude` : `<${el.tagName.toLowerCase()}> → Claude (unresolved)`,
-        detail:
-          src.file && src.line
-            ? `${src.file}:${src.line}`
-            : src.component
-            ? 'Source unresolved — Claude will grep fallback'
-            : 'No component. Claude will grep on element text.',
+        title: src.component ? `<${src.component}> → Claude` : `<${uiref.element.tag}> → Claude (unresolved)`,
+        detail: src.file && src.line
+          ? `${src.file}:${src.line}`
+          : src.component
+          ? 'Source unresolved — Claude will grep fallback'
+          : 'No component. Claude will grep on element text.',
       });
     } catch (err) {
       console.error('[uiref] capture failed', err);
       showToast({ title: 'Capture failed', detail: err.message || String(err), error: true });
     }
+  }
+
+  async function captureStep(el) {
+    try {
+      const uiref = await buildUiref(el);
+      workflow.steps.push(uiref);
+      await saveWorkflow();
+      updateCounter();
+      updateHint(); // refresh the "Send N steps to Claude" button
+      showToast({
+        title: `+ step ${workflow.steps.length}: <${uiref.target.component || uiref.element.tag}>`,
+        detail: uiref.target.file ? `${uiref.target.file}:${uiref.target.line}` : 'unresolved',
+      });
+    } catch (err) {
+      console.error('[uiref] step capture failed', err);
+      showToast({ title: 'Step capture failed', detail: err.message || String(err), error: true });
+    }
+  }
+
+  async function finishWorkflow() {
+    if (!workflow || !workflow.steps.length) return;
+    try {
+      const startedAtMs = new Date(workflow.startedAt).getTime();
+      const flow = {
+        format: 'uiref-flow/v1',
+        captured_at: workflow.startedAt,
+        finished_at: new Date().toISOString(),
+        title: null,
+        user_intent: null,
+        steps: workflow.steps.map((uiref, i) => ({
+          order: i + 1,
+          action: 'ref', // manual chain — no automatic action detection
+          target: uiref,
+          timestamp_ms: new Date(uiref.captured_at).getTime() - startedAtMs,
+        })),
+      };
+      await writeFlowToInbox(flow);
+      const count = workflow.steps.length;
+      showToast({
+        title: `Workflow → Claude (${count} step${count === 1 ? '' : 's'})`,
+        detail: 'Ready for your prompt in Claude Code.',
+      });
+      workflow = null;
+      await clearStoredWorkflow();
+      deactivatePicker();
+    } catch (err) {
+      console.error('[uiref] workflow export failed', err);
+      showToast({ title: 'Workflow export failed', detail: err.message || String(err), error: true });
+    }
+  }
+
+  async function writeFlowToInbox(flow) {
+    const dir = await ensureInboxHandle();
+    const stamp = flow.captured_at.replace(/[:.]/g, '-');
+    const filename = `${stamp}.uiref-flow.json`;
+    const fileHandle = await dir.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(flow, null, 2) + '\n');
+    await writable.close();
+    pruneInbox(dir).catch(() => {});
   }
 
   function collectAttrs(el) {
@@ -461,7 +692,7 @@
     const cutoff = Date.now() - PRUNE_MAX_AGE_MS;
     for await (const [name, handle] of dir.entries()) {
       if (handle.kind !== 'file') continue;
-      if (!name.endsWith('.uiref.json')) continue;
+      if (!name.endsWith('.uiref.json') && !name.endsWith('.uiref-flow.json')) continue;
       try {
         const file = await handle.getFile();
         if (file.lastModified < cutoff) {
@@ -494,9 +725,20 @@
   // =============================================================
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'uiref:activate-picker') {
-      activatePicker();
+      activatePicker(msg.mode || 'single');
       sendResponse({ ok: true });
     }
     return false; // synchronous
   });
+
+  // On page load, if there's a paused workflow in storage, show the resume badge
+  // so the user can continue after navigating/logging in/reloading.
+  (async () => {
+    const stored = await loadStoredWorkflow();
+    if (stored && stored.steps && stored.steps.length > 0) {
+      workflow = stored;
+      ensureRoot();
+      showPausedBadge();
+    }
+  })();
 })();

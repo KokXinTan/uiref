@@ -122,6 +122,84 @@ Unknown top-level fields MUST be preserved by round-tripping tools. Unknown fiel
 
 Future versions (`uiref/v2`, etc.) will bump the `format` field. Consumers SHOULD refuse to parse unknown major versions with a clear error rather than best-effort.
 
-## Related formats (future)
+## Related format: `uiref-flow/v1`
 
-- `uiref-flow/v1` — an ordered sequence of uirefs with interaction actions, for describing multi-step user journeys. Not yet specified.
+A `uiref-flow` is an ordered collection of uirefs, used to describe a multi-element workflow, a user journey, or a set of related components. It reuses the `uiref/v1` object as its step target.
+
+Filename convention: `<timestamp>.uiref-flow.json` (distinct from `.uiref.json`).
+
+### Example
+
+```json
+{
+  "format": "uiref-flow/v1",
+  "captured_at": "2026-04-16T14:22:00Z",
+  "finished_at": "2026-04-16T14:23:15Z",
+  "title": null,
+  "user_intent": null,
+  "steps": [
+    {
+      "order": 1,
+      "action": "ref",
+      "target": {
+        "format": "uiref/v1",
+        "captured_at": "2026-04-16T14:22:02Z",
+        "target": { "file": "src/lib/LoginForm.svelte", "line": 5, "component": "LoginForm" },
+        "element": { "tag": "input", "text": null, "attributes": { "name": "email" } },
+        "screenshot": "data:image/png;base64,…",
+        "user_intent": null
+      },
+      "timestamp_ms": 1820
+    },
+    {
+      "order": 2,
+      "action": "ref",
+      "target": { "format": "uiref/v1", "...": "another uiref" },
+      "timestamp_ms": 4210
+    }
+  ]
+}
+```
+
+### Fields
+
+| Field          | Type    | Required | Description |
+|----------------|---------|----------|-------------|
+| `format`       | string  | yes      | Always `"uiref-flow/v1"`. |
+| `captured_at`  | string  | yes      | ISO 8601 timestamp when the workflow started. |
+| `finished_at`  | string  | yes      | ISO 8601 timestamp when the workflow was finalized. |
+| `title`        | string  | no       | Optional human-readable title for the workflow. May be `null`. |
+| `user_intent`  | string  | no       | Optional free-text description of the user's goal. May be `null`. |
+| `steps`        | array   | yes      | Ordered array of step objects. Always 1-indexed by `order`. |
+
+### Step object
+
+| Field          | Type    | Required | Description |
+|----------------|---------|----------|-------------|
+| `order`        | integer | yes      | 1-indexed position in the flow. |
+| `action`       | string  | yes      | What the user was doing with this element. See action vocabulary below. |
+| `target`       | object  | yes      | A full `uiref/v1` object (same schema). |
+| `timestamp_ms` | integer | no       | Milliseconds since the flow's `captured_at`. Optional; omitted when the flow is a manual unordered grouping. |
+
+### Action vocabulary
+
+| Action          | Meaning |
+|-----------------|---------|
+| `ref`           | The user pointed at this element as a reference. No interaction implied. (Manual workflow chaining uses this by default.) |
+| `click`         | Pointer click. |
+| `type`          | Text was typed into an input. Include a `value` field with the string typed. |
+| `focus`         | Focus transition. |
+| `hover`         | Pointer hover. |
+| `navigate`      | URL changed. Include `from` and `to` fields with URLs. |
+| `assert_visible`, `assert_text`, `assert_absent` | User-marked assertions — what they expected to be true at this step. |
+
+Unknown actions MUST be preserved by tools that round-trip flows but MAY be ignored by consumers.
+
+### Consumption
+
+AI assistants that support `uiref/v1` SHOULD also support `uiref-flow/v1`:
+
+1. Detect `.uiref-flow.json` files alongside `.uiref.json` files in the inbox.
+2. Walk `steps[].target` to extract all referenced components — each is a full uiref.
+3. Use the flow's `title` and `user_intent` (if set) as context, plus the sequence order.
+4. Acknowledge the workflow to the user: "Got your 4-step workflow referencing LoginForm, EmailInput, SubmitButton, and DashboardHeader. What would you like me to do?"

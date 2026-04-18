@@ -39,7 +39,12 @@ async function updateStatus() {
 }
 
 document.getElementById('btn-activate').addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'uiref:popup-activate-picker' });
+  await chrome.runtime.sendMessage({ type: 'uiref:popup-activate-picker', mode: 'single' });
+  window.close();
+});
+
+document.getElementById('btn-activate-workflow').addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({ type: 'uiref:popup-activate-picker', mode: 'workflow' });
   window.close();
 });
 

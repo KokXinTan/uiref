@@ -44,6 +44,12 @@
       border: 1px solid #2e2e3e;
     }
     .btn-secondary:hover { background: #2a2a3a; }
+    .btn-workflow {
+      background: #22222e;
+      color: #a78bfa;
+      border: 1px solid #3a3a5e;
+    }
+    .btn-workflow:hover { background: #2a2a3e; border-color: #6c7bf0; }
     .row {
       display: flex;
       justify-content: space-between;
@@ -82,8 +88,10 @@
   <div class="logo">uiref</div>
   <div class="tagline">point at UI, send to Claude</div>
 
-  <button class="btn" id="btn-activate">Start picker</button>
-  <button class="btn btn-secondary" id="btn-setup">Set Claude inbox folder</button>
+  <button class="btn" id="btn-activate">Pick one element</button>
+  <button class="btn btn-workflow" id="btn-activate-workflow">Pick multiple (workflow)</button>
+  <div class="divider"></div>
+  <button class="btn btn-secondary" id="btn-setup">Change inbox folder</button>
 
   <div class="divider"></div>
 

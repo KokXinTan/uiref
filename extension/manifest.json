@@ -39,7 +39,14 @@
         "default": "Ctrl+Shift+C",
         "mac": "Command+Shift+C"
       },
-      "description": "Activate the uiref picker"
+      "description": "Activate the uiref picker (single element)"
+    },
+    "activate-workflow": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+W",
+        "mac": "Command+Shift+W"
+      },
+      "description": "Activate the uiref workflow picker (chain multiple elements)"
     }
   },
   "content_scripts": [

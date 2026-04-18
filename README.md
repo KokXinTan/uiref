@@ -198,12 +198,12 @@ On first capture, the extension will prompt you to pick this folder. Select `~/u
 
 ### 5. (Recommended) Enable richest capture on local dev
 
-By default, the extension only starts buffering events (console logs, errors, network) once you activate the picker on a tab — this keeps the extension review-safe for general-audience publishing. For your own projects, you probably want **eager buffering** (full pre-click history) and **GraphQL operation-name extraction** (so repeated calls to `/graphql` are distinguishable).
+By default, the extension only starts buffering events (console logs, errors, network) once you activate the picker on a tab. For your own projects, you probably want **eager buffering** (full pre-click history) and **GraphQL operation-name extraction** (so repeated calls to `/graphql` are distinguishable).
 
-Add to your app's bootstrap (dev-only, zero production impact):
+Add to your app's bootstrap:
 
 ```js
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   window.__uirefConfig = {
     eagerPatch: true,                 // buffer events from page load
     captureGraphQLOperation: true,    // extract GraphQL operationName from POST bodies
@@ -211,12 +211,16 @@ if (import.meta.env.DEV) {
 }
 ```
 
-Put it where your app initializes:
-- **SvelteKit** — top of `src/routes/+layout.svelte` `<script>` block, or an inline script in `src/app.html`
+**Safe in production.** `import.meta.env.DEV` is a compile-time constant in Vite. `vite build` (any `--mode`) sets it to `false`, so Rollup's dead-code elimination strips the entire block from the production bundle. The shipped JS contains zero uiref code — no `__uirefConfig`, no config object, nothing. Verified by grepping the build output.
+
+**SvelteKit users:** for cleanest placement, use `src/hooks.client.ts` (runs before any route). For other frameworks:
+
 - **React (Vite)** — top of `src/main.tsx`, before `createRoot()`
 - **Next.js** — top of `app/layout.tsx` (client component) or in a `<Script>` in `app.html`
 - **Vue** — top of `src/main.ts`, before `app.mount()`
 - **Angular** — top of `src/main.ts`, before `bootstrapApplication()`
+
+**Why this works even though inject.js runs before your app:** the extension re-reads `window.__uirefConfig` dynamically on every event emission, not just at page load. So setting the config late (after your app has started) still enables capture for subsequent events.
 
 See [full config options](./SPEC.md#how-event-capture-is-scoped) in the spec.
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "uiref — point at UI, send to Claude",
   "short_name": "uiref",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Point at any UI element in your running app, send a structured reference (source file, line, component, screenshot) to Claude Code.",
   "permissions": [
     "activeTab",

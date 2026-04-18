@@ -1,203 +1,127 @@
-# anchorfile Format Specification
+# uiref Format Specification
 
-**Schema version:** 1
-**Status:** draft (subject to change until first tagged release)
+**Schema version:** 1 (`uiref/v1`)
+**Status:** draft
 
-This document defines the on-disk format for an **anchorfile** — a JSON sidecar that records named spatial regions on an image asset. The format is designed to be:
+This document defines the `uiref/v1` JSON format — a minimal, language-agnostic reference to a UI element that an AI coding assistant (like Claude Code) can consume to know exactly which component a user is pointing at.
 
-- **Machine-written** by annotation tools and **machine-read** by code generators, runtime loaders, and LLM assistants.
-- **Human-scannable** (every anchor has a `label` describing what it is).
-- **Language-agnostic** (no framework-specific fields; coordinate transforms happen in consumers).
-- **Git-friendly** (deterministic key ordering, stable serialization, small diffs).
+## Design principles
 
-## File naming
+- **Minimal.** Five required fields. Everything else is optional or forward-compat.
+- **Self-contained.** A single JSON file can be dropped into any AI assistant and it has enough to act.
+- **Open for extension.** Unknown fields MUST be preserved by round-tripping tools but MAY be ignored by consumers.
+- **Local-only.** No URLs point to anything except local file paths. No telemetry, no cloud.
 
-An anchorfile lives beside its source asset and uses this naming convention:
-
-```
-<asset_basename>.anchors.json
-```
-
-Examples:
-
-| Source asset                  | Sidecar                                  |
-|-------------------------------|------------------------------------------|
-| `level_01.png`                | `level_01.anchors.json`                  |
-| `assets/ui/background.jpg`    | `assets/ui/background.anchors.json`      |
-| `pages/form.pdf`              | `pages/form.anchors.json`                |
-
-One anchorfile per source asset. Tools should resolve the pairing by stripping any extension from the asset path and appending `.anchors.json`.
-
-## Top-level structure
+## Minimal example
 
 ```json
 {
-  "schema_version": 1,
-  "source": "level_01.png",
-  "intrinsic_size": [1920, 1080],
-  "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "coordinate_origin": "top-left",
-  "anchors": [ /* ... */ ]
+  "format": "uiref/v1",
+  "captured_at": "2026-04-16T14:22:00Z",
+  "target": {
+    "file": "src/lib/SaveButton.svelte",
+    "line": 12,
+    "component": "SaveButton"
+  },
+  "element": {
+    "tag": "button",
+    "text": "Save Changes"
+  },
+  "screenshot": "data:image/png;base64,iVBORw0KGgo...",
+  "user_intent": null
 }
 ```
 
-### Top-level fields
+That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, `element`, `screenshot`. `user_intent` is optional and usually `null` at capture time (the user types their intent into the AI chat afterward).
 
-| Field                | Type              | Required | Description |
-|----------------------|-------------------|----------|-------------|
-| `schema_version`     | integer           | yes      | Currently `1`. Tools MUST refuse to parse unknown major versions with a clear error. |
-| `source`             | string            | yes      | Path to the source asset, relative to the anchorfile. Conventionally the basename. |
-| `intrinsic_size`     | [integer, integer]| yes      | `[width, height]` of the source asset in pixels. This is the authoritative coordinate space for all `px` fields. |
-| `content_hash`       | string            | yes      | `sha256:<hex>` of the source asset's bytes at annotation time. Used by `anchor verify` to detect drift. |
-| `coordinate_origin`  | string            | yes      | Always `"top-left"` in v1. Reserved for future asset types (PDF, SVG) where other origins may apply. |
-| `anchors`            | array             | yes      | Ordered array of anchor objects. Order is preserved but not semantically meaningful; lookup is by `name`. |
+## Field reference
 
-## Anchor object
+### Top-level
 
-Every anchor object has these common fields, plus shape-specific coordinate fields determined by `kind`.
+| Field          | Type    | Required | Description |
+|----------------|---------|----------|-------------|
+| `format`       | string  | yes      | Always `"uiref/v1"` for this schema version. |
+| `captured_at`  | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
+| `target`       | object  | yes      | Where the component is defined. See below. |
+| `element`      | object  | yes      | What the DOM element looks like. See below. |
+| `screenshot`   | string  | yes      | Base64 data URI of the element (PNG). Enables vision-capable AIs to see what was pointed at. May be `null` if capture failed. |
+| `user_intent`  | string  | no       | Optional free-text note about what the user wants done. Usually null at capture time; the user types intent into the AI chat afterward. |
 
-### Common fields
+### `target` object
 
-| Field    | Type   | Required | Description |
-|----------|--------|----------|-------------|
-| `name`   | string | yes      | Unique identifier within this anchorfile. Conventionally `snake_case`. Used by code consumers to look up the anchor. |
-| `kind`   | string | yes      | One of: `"rect"`, `"point"`, `"ellipse"`. (v1 primitive set — v2 adds `polygon`, `polyline`, `rounded_rect`, `nine_slice`.) |
-| `label`  | string | yes      | Human-readable description of what this anchor represents. Read by LLMs to understand semantics; read by humans for diffs and reviews. |
-| `px`     | object | yes      | Coordinates in the source asset's pixel space (see `intrinsic_size`). Shape depends on `kind`. |
-| `norm`   | object | yes      | Coordinates normalized to `[0, 1]` based on `intrinsic_size`. Provided redundantly so consumers never have to compute the transform. Shape matches `px`. |
+| Field        | Type                | Required | Description |
+|--------------|---------------------|----------|-------------|
+| `file`       | string \| null      | yes      | Source file path, relative to the project root when possible. May be `null` if resolution failed. |
+| `line`       | integer \| null     | yes      | 1-indexed line number where the component is defined. May be `null` if resolution failed. |
+| `component`  | string \| null      | yes      | The component's display name (`SaveButton`, `UserProfile`, etc.). May be `null` for unresolved elements. |
 
-`name` uniqueness is enforced across the entire `anchors` array; tools writing anchorfiles MUST reject duplicate names.
+Consumers MUST handle the null case gracefully (e.g., fall back to grepping the codebase for `element.text`).
 
-### Shape: `rect`
+### `element` object
 
-An axis-aligned rectangle.
+| Field           | Type    | Required | Description |
+|-----------------|---------|----------|-------------|
+| `tag`           | string  | yes      | HTML tag name (`button`, `div`, etc.). |
+| `text`          | string  | no       | Inner text content of the element, if any. |
+| `attributes`    | object  | no       | Key-value map of DOM attributes (class, id, data-*, etc.). |
+| `dom_path`      | string  | no       | CSS selector path from `body` to the element, e.g., `body > main > form > button.primary`. |
 
-```json
-{
-  "name": "chest_treasure",
-  "kind": "rect",
-  "label": "Treasure chest hitbox in the top-left room",
-  "px":   { "x": 340, "y": 180, "w": 96, "h": 72 },
-  "norm": { "x": 0.177, "y": 0.167, "w": 0.050, "h": 0.067 }
-}
+## Delivery convention
+
+A uiref is a standalone JSON file. Tools that produce uirefs SHOULD write them to a directory that the AI assistant watches. The conventional location is:
+
+```
+~/.claude/uiref-inbox/<ISO-8601-timestamp>.json
 ```
 
-| `px` field | Meaning                                    |
-|------------|--------------------------------------------|
-| `x`, `y`   | Top-left corner in pixel coordinates.      |
-| `w`, `h`   | Width and height in pixels.                |
+AI assistants that consume uirefs SHOULD:
 
-`norm` fields mirror `px` exactly, with each value divided by the corresponding axis of `intrinsic_size`. Tools SHOULD round normalized values to 3–4 decimal places.
+1. Check this directory when the user's message references a UI element ("fix this", "change the...", "modify that...", etc.).
+2. Read the most recent file within a reasonable recency window (e.g., 5 minutes).
+3. Use `target.file` and `target.line` as the authoritative reference for code modifications.
+4. Fall back to grepping for `element.text` in the codebase if `target.file` is null.
+5. Acknowledge the reference to the user: "I see you pointed at `SaveButton` (src/lib/SaveButton.svelte:12). ..."
 
-### Shape: `point`
+## Resolution mechanism: `data-uiref-*` attributes
 
-A single location. Useful for label anchors, spawn points, camera look-at targets, "where the arrow points to", etc.
+The recommended mechanism for surfacing source locations to the DOM is a set of reserved `data-*` attributes that build tools inject at compile time.
 
-```json
-{
-  "name": "spawn_player",
-  "kind": "point",
-  "label": "Where the player spawns at level start",
-  "px":   { "x": 240, "y": 810 },
-  "norm": { "x": 0.125, "y": 0.750 }
-}
-```
+| Attribute                | Value                                          |
+|--------------------------|------------------------------------------------|
+| `data-uiref-file`        | Source file path (relative to project root).   |
+| `data-uiref-line`        | 1-indexed line number (as string).             |
+| `data-uiref-component`   | Component display name.                        |
 
-| `px` field | Meaning                               |
-|------------|---------------------------------------|
-| `x`, `y`   | Point location in pixel coordinates.  |
+Extensions that capture uirefs SHOULD prefer these attributes over framework-specific APIs when present.
 
-### Shape: `ellipse`
+This approach works in dev AND production builds, is immune to framework internal changes, and is framework-agnostic at the attribute level.
 
-An axis-aligned ellipse defined by center and radii. Useful for circular or ovular regions that would be awkwardly approximated by a rectangle, such as a radial trigger zone, a sensor field of view, or a rounded decorative motif.
+### Per-framework build integrations
 
-```json
-{
-  "name": "trigger_boss_arena",
-  "kind": "ellipse",
-  "label": "Circular trigger zone that starts the boss encounter",
-  "px":   { "cx": 1440, "cy": 540, "rx": 220, "ry": 220 },
-  "norm": { "cx": 0.750, "cy": 0.500, "rx": 0.115, "ry": 0.204 }
-}
-```
+| Framework   | Integration            | Status  |
+|-------------|------------------------|---------|
+| Svelte 5    | `@uiref/svelte` preprocessor | v1 target |
+| React (Vite)| `@uiref/vite-react`    | planned |
+| Vue 3       | `@uiref/vue`           | planned |
+| Angular     | `@uiref/angular-builder` | planned |
 
-| `px` field   | Meaning                                   |
-|--------------|-------------------------------------------|
-| `cx`, `cy`   | Center in pixel coordinates.              |
-| `rx`, `ry`   | Semi-axis lengths (half-width, half-height) in pixels. |
+### Fallback resolution tiers
 
-For a circle, set `rx == ry`. Rotated ellipses are not supported in v1 and are reserved for a future `kind: "ellipse_rotated"`.
+Capture tools should attempt resolution in this order:
 
-## Serialization rules
+1. **Tier 1 (highest):** Read `data-uiref-*` attributes from the element or its ancestors.
+2. **Tier 2:** Framework dev-mode internals (React Fiber `_debugSource`, Vue `__vueParentComponent`, Angular `ng.getComponent`). Works only in dev builds and specific framework versions.
+3. **Tier 3:** Source map lookup for any onClick handlers or bundled JS referencing the element.
+4. **Tier 4 (last resort):** Return `target.*` as `null` and let the AI fall back to text-based codebase search using `element.text`.
 
-To keep anchorfiles diff-friendly in git, tools that write anchorfiles MUST follow these rules:
-
-1. **Two-space indentation.** No tabs.
-2. **Trailing newline** at end of file.
-3. **Key ordering** at the top level is fixed: `schema_version`, `source`, `intrinsic_size`, `content_hash`, `coordinate_origin`, `anchors`.
-4. **Key ordering** within each anchor is fixed: `name`, `kind`, `label`, `px`, `norm`.
-5. **Numeric precision** for `norm` values: 3 decimal places minimum, 4 maximum. Do not emit `0.15400000000001`.
-6. **UTF-8 without BOM.**
-
-Readers MUST NOT rely on these rules — they MUST accept any valid JSON that matches the schema. The rules apply to writers only.
-
-## `content_hash` semantics
-
-The `content_hash` field records `sha256:<hex>` of the source asset's bytes at the moment the anchorfile was saved. Tools use it to detect when the image has changed out from under the anchors:
-
-- **`anchor verify`** re-hashes the source and warns if it differs.
-- **Codegen tools** MAY embed the expected hash in generated code as a defensive check.
-- **`anchor annotate`** on open: if the current asset hash differs from the stored hash, the annotator SHOULD show a warning banner before letting the user edit — old anchors may no longer make sense against new art.
-
-Format: `sha256:` prefix followed by 64 lowercase hex characters. Other hash algorithms MAY be supported in future schema versions.
-
-## Supported asset types (v1)
-
-v1 supports raster images only: **PNG**, **JPEG**, **WebP**. `intrinsic_size` is the image's pixel dimensions at its native resolution.
-
-Reserved for future versions:
-
-- **PDF** — one anchorfile per page, `source` references `document.pdf#page=N`, `intrinsic_size` derived from a declared rasterization DPI.
-- **SVG** — anchors may optionally reference element IDs in addition to pixel coordinates; rasterization rules TBD.
-- **Video** — temporal anchors with start/end timestamps.
+Each tier that fails degrades gracefully to the next.
 
 ## Forward compatibility
 
-Unknown fields inside an anchor object MUST be preserved by round-tripping tools but MAY be ignored by consumers. This allows experimental fields to be added without breaking older readers.
+Unknown top-level fields MUST be preserved by round-tripping tools. Unknown fields inside `target` or `element` MAY be ignored by consumers but SHOULD be preserved. This allows frameworks and tools to add metadata without breaking older readers.
 
-Unknown top-level fields are reserved for schema evolution; tools should preserve them when rewriting but should not rely on their presence.
+Future versions (`uiref/v2`, etc.) will bump the `format` field. Consumers SHOULD refuse to parse unknown major versions with a clear error rather than best-effort.
 
-## Example: a full anchorfile
+## Related formats (future)
 
-```json
-{
-  "schema_version": 1,
-  "source": "level_01.png",
-  "intrinsic_size": [1920, 1080],
-  "content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "coordinate_origin": "top-left",
-  "anchors": [
-    {
-      "name": "spawn_player",
-      "kind": "point",
-      "label": "Where the player spawns at level start",
-      "px":   { "x": 240, "y": 810 },
-      "norm": { "x": 0.125, "y": 0.750 }
-    },
-    {
-      "name": "chest_treasure",
-      "kind": "rect",
-      "label": "Treasure chest hitbox in the top-left room",
-      "px":   { "x": 340, "y": 180, "w": 96, "h": 72 },
-      "norm": { "x": 0.177, "y": 0.167, "w": 0.050, "h": 0.067 }
-    },
-    {
-      "name": "trigger_boss_arena",
-      "kind": "ellipse",
-      "label": "Circular trigger zone that starts the boss encounter",
-      "px":   { "cx": 1440, "cy": 540, "rx": 220, "ry": 220 },
-      "norm": { "cx": 0.750, "cy": 0.500, "rx": 0.115, "ry": 0.204 }
-    }
-  ]
-}
-```
+- `uiref-flow/v1` — an ordered sequence of uirefs with interaction actions, for describing multi-step user journeys. Not yet specified.

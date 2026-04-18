@@ -1,0 +1,23 @@
+{
+  "name": "@uiref/babel-plugin-react",
+  "version": "0.1.0",
+  "description": "Babel plugin that injects data-uiref-* attributes onto JSX elements for the uiref Chrome extension.",
+  "keywords": ["react", "babel", "uiref", "claude", "devtools"],
+  "license": "MIT",
+  "author": "uiref contributors",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KokXinTan/uiref.git",
+    "directory": "plugins/react"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.0.0"
+  }
+}

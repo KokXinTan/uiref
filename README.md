@@ -1,102 +1,200 @@
-# anchorfile
+# uiref
 
-> A language-agnostic sidecar format for named spatial anchors on image assets, designed so LLMs and humans can overlay UI elements, hitboxes, and drawings at pixel-precise coordinates without guessing.
+> Point at any UI element in your running web app. Send a structured reference (source file, line, component, screenshot) to Claude. Stop saying "this button" — show Claude exactly which one.
 
-**Status:** alpha. The annotator is functional — [try it in your browser](https://kokxintan.github.io/anchorfile/) or open `annotator/index.html` locally.
+**Status:** alpha. Extension + Svelte / React / Vue / Angular build plugins + Claude Skill all functional.
 
 ## The problem
 
-You need to overlay interactive elements on a fixed image asset — tap targets, hitboxes, drawings, labels, clickable regions, collision zones, form fields, spawn points — and you need them to land at pixel-precise locations. This comes up in:
+When you tell an AI coding assistant "fix this button" or "change that header," it has to guess which component you mean. Across a real codebase with dozens of similar elements, that guess is often wrong. You spend your turn explaining location instead of intent.
 
-- **Game level maps** — spawn points, collision regions, and trigger zones on illustrated scenes.
-- **Illustrated UI backgrounds** — painted or photographed backdrops with interactive elements layered on top.
-- **HTML image maps and infographics** — diagrams and charts with clickable regions.
-- **PDF form authoring** — form fields placed over scanned or designed page layouts.
-- **Nine-patch backgrounds** — cap insets and stretch regions on UI component art.
+Vision-based "send Claude a screenshot" doesn't fix this — even frontier vision models drift 5–30 pixels on coordinate regression, and a screenshot tells Claude what the element looks like, not which source file rendered it.
 
-Today you do one of the following, and they all hurt:
+## The fix
 
-- **Hand-tune magic offsets.** `.offset(y: height * 0.27)`, then build, run, screenshot, tweak, repeat. Every screen size and every future edit pays the cost again.
-- **Write a one-off measurement script.** Cross-correlation, template matching, manual pixel spelunking in an image editor. Works once, rots the moment the art changes.
-- **Ask an LLM to read coordinates from the image.** Vision-based coordinate regression drifts 5–30 px even in frontier models. Unusable for precise UI.
+1. Install the **uiref Chrome extension**.
+2. Add the **build plugin** for your framework (Svelte, React, Vue, or Angular — 2 minutes of config).
+3. Install the **Claude Skill** so Claude auto-checks your uiref inbox.
+4. Press **⌘⇧C** (⌃⇧C on Win/Linux), click the element, done.
 
-The underlying reason is that no standard format exists for saying "this rectangle on this PNG is named `spawn_player`, and here are its exact pixel bounds" in a way a toolchain can consume without guessing.
-
-## The solution
-
-An **anchorfile** is a small JSON sidecar committed alongside the asset:
+The extension writes a JSON file containing the exact source file, line, and component name to `~/.claude/uiref-inbox/`. Next time you ask Claude "fix this," it reads the most recent file and knows exactly what you meant.
 
 ```
-assets/
-├── level_01.png
-└── level_01.anchors.json    ← the anchorfile
+you:    *clicks Save button in browser*
+        *switches to Claude Code*
+        "make this use the danger variant"
+
+claude: I see you pointed at <SaveButton> at src/components/SaveButton.tsx:42.
+        Applying the danger variant…
+        [edit file]
 ```
 
-It looks like this:
+No more ambiguity, no more wasted turns.
+
+## Quick start
+
+**1. Install the Chrome extension** (development mode for now — Web Store submission pending):
+
+```bash
+git clone https://github.com/KokXinTan/uiref.git
+cd uiref/extension
+# Open chrome://extensions → Developer mode → Load unpacked → select this folder
+```
+
+**2. Install the build plugin for your framework:**
+
+Svelte 4 / 5:
+```bash
+npm install --save-dev @uiref/svelte
+```
+```js
+// svelte.config.js
+import uiref from '@uiref/svelte';
+export default { preprocess: [uiref()] };
+```
+
+React (Vite):
+```bash
+npm install --save-dev @uiref/babel-plugin-react
+```
+```js
+// vite.config.js
+import react from '@vitejs/plugin-react';
+export default {
+  plugins: [react({ babel: { plugins: ['@uiref/babel-plugin-react'] } })],
+};
+```
+
+Vue 3 (Vite):
+```bash
+npm install --save-dev @uiref/vue
+```
+```js
+// vite.config.js
+import vue from '@vitejs/plugin-vue';
+import uirefVue from '@uiref/vue';
+export default { plugins: [uirefVue(), vue()] };
+```
+
+Angular 17+:
+```bash
+npm install --save-dev @uiref/angular
+```
+(See `plugins/angular/README.md` for integration.)
+
+**3. Install the Claude Skill:**
+
+```bash
+cp -r skill/ ~/.claude/skills/uiref/
+```
+
+**4. First run:**
+
+- Visit any page served by your dev server with the build plugin active.
+- Press ⌘⇧C (Mac) or Ctrl+Shift+C (Win/Linux).
+- Click any element.
+- Extension prompts once: "pick an inbox folder" — choose `~/.claude/uiref-inbox/` (create it if needed).
+- You'll see `<SaveButton> → Claude` toast.
+- Switch to Claude Code, say "change this to the danger variant."
+- Claude reads the inbox, acknowledges the target, edits the right file.
+
+## How it works
+
+```
+┌─────────────────────────────────────┐
+│  Your app (React / Vue / Svelte /   │
+│  Angular), built with the build     │
+│  plugin → DOM has data-uiref-*      │
+│  attributes                          │
+└────────────────┬────────────────────┘
+                 │  click element
+                 ▼
+┌─────────────────────────────────────┐
+│  uiref Chrome extension             │
+│    • hover highlight + source label │
+│    • click captures element         │
+│    • reads data-uiref-* attrs       │
+│    • screenshots the element        │
+│    • writes uiref/v1 JSON           │
+└────────────────┬────────────────────┘
+                 │  ~/.claude/uiref-inbox/
+                 │  2026-04-16T14-22-00.uiref.json
+                 ▼
+┌─────────────────────────────────────┐
+│  Claude Code + uiref skill          │
+│    • detects UI-reference language  │
+│    • reads latest uiref             │
+│    • edits target.file:line         │
+└─────────────────────────────────────┘
+```
+
+The `data-uiref-*` attribute mechanism is resilient: it's injected at build time by the plugin, works in both dev and production, and is immune to framework internal changes (React 19's `_debugSource` removal, Svelte 5's compiler rewrite, etc.).
+
+## Format
+
+A uiref is a small JSON file:
 
 ```json
 {
-  "schema_version": 1,
-  "source": "level_01.png",
-  "intrinsic_size": [1920, 1080],
-  "content_hash": "sha256:…",
-  "coordinate_origin": "top-left",
-  "anchors": [
-    {
-      "name": "spawn_player",
-      "kind": "point",
-      "label": "Where the player spawns at level start",
-      "px":   { "x": 240, "y": 810 },
-      "norm": { "x": 0.125, "y": 0.750 }
-    },
-    {
-      "name": "chest_treasure",
-      "kind": "rect",
-      "label": "Treasure chest hitbox in the top-left room",
-      "px":   { "x": 340, "y": 180, "w": 96, "h": 72 },
-      "norm": { "x": 0.177, "y": 0.167, "w": 0.050, "h": 0.067 }
-    },
-    {
-      "name": "trigger_boss_arena",
-      "kind": "ellipse",
-      "label": "Circular trigger zone that starts the boss encounter",
-      "px":   { "cx": 1440, "cy": 540, "rx": 220, "ry": 220 },
-      "norm": { "cx": 0.750, "cy": 0.500, "rx": 0.115, "ry": 0.204 }
-    }
-  ]
+  "format": "uiref/v1",
+  "captured_at": "2026-04-16T14:22:00Z",
+  "target": {
+    "file": "src/lib/SaveButton.svelte",
+    "line": 12,
+    "component": "SaveButton"
+  },
+  "element": {
+    "tag": "button",
+    "text": "Save Changes",
+    "attributes": { "class": "btn btn-primary" },
+    "dom_path": "body > main > form > button.btn-primary"
+  },
+  "screenshot": "data:image/png;base64,…",
+  "user_intent": null
 }
 ```
 
-Humans author it once through a frictionless local browser annotator. Machines (code generators, runtime loaders, LLM assistants) consume it deterministically. See [SPEC.md](./SPEC.md) for the full format.
+Full spec: [SPEC.md](./SPEC.md).
 
-## What ships in this repo
+## Repo layout
 
 ```
-anchorfile/
-├── SPEC.md               # The anchorfile JSON format (v1 schema)
-├── docs/design.md        # Architecture and rationale
-├── cli/                  # Planned: `anchor` CLI wrapper
-├── annotator/            # Browser annotator (vanilla JS, zero dependencies)
-├── skill/                # Claude Skill for LLM integration
-└── examples/             # Worked examples
+uiref/
+├── SPEC.md                  # uiref/v1 format specification
+├── extension/               # Chrome extension (MV3, vanilla JS)
+├── plugins/
+│   ├── svelte/              # @uiref/svelte — preprocessor
+│   ├── react/               # @uiref/babel-plugin-react
+│   ├── vue/                 # @uiref/vue — Vite plugin
+│   └── angular/             # @uiref/angular — Vite plugin
+├── skill/                   # Claude Skill
+├── annotator/               # (legacy) image annotation tool — separate mode
+└── docs/
 ```
 
-## Tooling
+## Keyboard shortcuts
 
-- **Browser annotator** ([live](https://kokxintan.github.io/anchorfile/) / [local](./annotator/index.html)) — draw named regions on any image and export a spec-compliant `.anchors.json`. Supports rect, point, and ellipse primitives with zoom, pan, arrow-key nudge, undo/redo, and duplicate.
-- **Claude Skill** (`skill/SKILL.md`) — teaches Claude Code to check for sidecars before placing UI, and to request annotation when ground truth is missing.
+| Shortcut | Action |
+|---|---|
+| ⌘⇧C / Ctrl+Shift+C | Activate picker |
+| Click | Capture hovered element |
+| Escape | Cancel picker |
+| ↑ | Select parent element |
+| ↓ | Select first child element |
 
-### Planned
+## Known limitations (v0.1)
 
-- **`anchor render <sidecar>`** — burns all anchors onto a copy of the source image for visual verification. (The browser annotator already has a Render button that does this.)
-- **`anchor verify <sidecar>`** — checks `content_hash` against the current image and warns on drift.
-- **`anchor gen <sidecar> --lang swift`** — generates typed constants in your target language (Swift first, others via community).
+- **Chrome only.** Firefox port planned.
+- **Dev builds only by default.** Production use requires `enabled: true` on the build plugin. Still works, but you probably don't want data attributes in shipped HTML.
+- **Angular plugin is minimal.** Covers external `.component.html` templates and simple inline templates. Complex inline template strings and `@defer` blocks may not be handled yet.
+- **First element only.** Build plugins inject on the first element of each component's template. Nested components still resolve correctly because the extension walks up the DOM tree.
 
-See [docs/design.md](./docs/design.md) for the full architecture, roadmap, and scope locks.
+## Why not [...other tool]?
 
-## Why this exists
-
-LLMs are increasingly the ones writing UI layout code, but they can't see pixels precisely. Rather than wait for vision models to catch up, this project treats the problem as a missing format: give LLMs (and humans) a place to *read* ground-truth spatial data instead of asking them to *guess* it. The format is designed so that `<asset>.anchors.json` is as natural a companion to `<asset>.png` as a `.d.ts` is to a `.js` file.
+- **React DevTools:** inspects components but doesn't output structured data to AI assistants. Also React-only.
+- **click-to-component / LocatorJS:** open the file in your editor. Similar mechanism, different destination. uiref pipes to AI assistants, supports multiple frameworks, and produces a protocol other tools can adopt.
+- **Claude for Chrome:** agentic browser automation, not component-to-source resolution. Complementary to uiref.
+- **Claude Design:** generates prototypes. Different workflow (design → code), not running-app → source.
 
 ## License
 
@@ -104,4 +202,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ## Contributing
 
-Issues, feature requests, and discussion about the format are welcome. The annotator is functional; the CLI and codegen are next.
+Issues and feature requests welcome. The protocol is load-bearing — changes to `uiref/v1` are versioned carefully. Build plugins for other frameworks (Solid, Qwik, Lit, etc.) are welcome as community contributions.

@@ -1,0 +1,24 @@
+{
+  "name": "@uiref/svelte",
+  "version": "0.1.0",
+  "description": "Svelte preprocessor that injects data-uiref-* attributes for the uiref Chrome extension. Works with Svelte 4 and Svelte 5.",
+  "keywords": ["svelte", "uiref", "claude", "devtools", "preprocessor"],
+  "license": "MIT",
+  "author": "uiref contributors",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KokXinTan/uiref.git",
+    "directory": "plugins/svelte"
+  },
+  "peerDependencies": {
+    "svelte": "^4.0.0 || ^5.0.0"
+  }
+}

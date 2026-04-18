@@ -712,7 +712,6 @@
 
   async function captureStep(el) {
     try {
-      const urlBefore = location.href;
       const uiref = await buildUiref(el);
       workflow.steps.push(uiref);
       await saveWorkflow();
@@ -723,17 +722,20 @@
         title: `+ step ${workflow.steps.length}: <${uiref.target.component || uiref.element.tag}>`,
         detail: `${uiref.target.file ? uiref.target.file + ':' + uiref.target.line : 'unresolved'} · ${isMac() ? '⌘Z' : 'Ctrl+Z'} to undo`,
       });
-      // If the click causes navigation, the URL will change. Wait a bit,
-      // then update the step's page with url_after so the AI can see
-      // "this click went from X to Y" without inferring.
-      setTimeout(() => {
-        const urlAfter = location.href;
-        if (urlAfter !== urlBefore && uiref.page) {
-          uiref.page.url_after = urlAfter;
-          uiref.page.pathname_after = location.pathname;
-          saveWorkflow().catch(() => {});
-        }
-      }, 800);
+      // Always fill in url_after after a short delay so the field is
+      // consistently present. Claude diffs page.url vs page.url_after to
+      // know if the click navigated. A click that doesn't navigate has
+      // url_after === url — absence of url_after is never used as a signal.
+      const action = inferAction(uiref);
+      if (action === 'click' || action === 'navigate') {
+        setTimeout(() => {
+          if (uiref.page) {
+            uiref.page.url_after = location.href;
+            uiref.page.pathname_after = location.pathname;
+            saveWorkflow().catch(() => {});
+          }
+        }, 800);
+      }
     } catch (err) {
       console.error('[uiref] step capture failed', err);
       showToast({ title: 'Step capture failed', detail: err.message || String(err), error: true });

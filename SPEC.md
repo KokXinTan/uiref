@@ -42,7 +42,7 @@ That's a complete, valid uiref. Five fields: `format`, `captured_at`, `target`, 
 |--------------------|---------|----------|-------------|
 | `format`           | string  | yes      | Always `"uiref/v1"` for this schema version. |
 | `captured_at`      | string  | yes      | ISO 8601 UTC timestamp of when the capture happened. |
-| `page`             | object  | no       | Page context: `url`, `pathname`, `title` at capture time. In workflow mode, if a click caused a navigation within ~800ms, also includes `url_after` and `pathname_after` (the post-navigation URL). |
+| `page`             | object  | no       | Page context: `url`, `pathname`, `title` at capture time. In workflow mode, for click/navigate actions, always includes `url_after` and `pathname_after` (the URL ~800ms after the step — may or may not differ from `url`). Other action types (type/focus/toggle/ref) omit these fields. Consumers should compare `url` vs `url_after` to determine if a click navigated. |
 | `viewport`         | object  | no       | `width`, `height`, `dpr`, `theme` ("dark" / "light" / null). |
 | `target`           | object  | yes      | The innermost component whose DOM contains the clicked element. See below. |
 | `ancestors`        | array   | no       | Ordered chain of parent components (inner → outer). Each entry has `file`, `line`, `component`. Useful when `target` is a generic wrapper and the specific context lives higher up. May be `null`. |

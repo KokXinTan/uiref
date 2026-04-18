@@ -13,7 +13,7 @@ The user has (or should have) the uiref Chrome extension installed. When they wa
 Each file contains:
 - `target.file` / `target.line` / `target.component` — the INNERMOST component (the DOM immediately containing the clicked element)
 - `ancestors` — ordered parent chain (inner → outer). Critical when `target` is a generic wrapper (like `EchartsWrapper`, `Card`, `Button`) and the "which one" context lives one or two levels up
-- `page` — `url`, `pathname`, `title` at capture time (tells you which route/page). If the click caused a navigation, `page.url_after` and `page.pathname_after` are populated — use these to see "this button went from /login to /dashboard".
+- `page` — `url`, `pathname`, `title` at capture time (tells you which route/page). For click and navigate actions, `page.url_after` and `page.pathname_after` are always populated (not only when they change) — compare `url` vs `url_after` to determine whether the click caused a navigation. For non-click actions (type/focus/etc), these fields are omitted.
 - `viewport` — `width`, `height`, `dpr`, `theme` (`"dark"` / `"light"` / `null`) — useful for responsive/theme issues
 - `element.tag` / `element.text` / `element.attributes` — what the DOM looked like
 - `element.computed_styles` — current CSS values (color, background, font, padding, etc.) — useful for "why is this blue?" / "make this match" questions

@@ -55,21 +55,18 @@
     highlight.id = 'uiref-highlight';
     label = document.createElement('div');
     label.id = 'uiref-label';
-    hint = document.createElement('div');
-    hint.id = 'uiref-hint';
+    // Note: hint bar, counter pill, and paused badge used to render on the page.
+    // They are now 100% replaced by the tray badge + extension popup, so the
+    // page stays clean. Only the hover highlight, floating label, and the
+    // capture toast ever appear on the page.
+    hint = document.createElement('div');      // unused — kept for code compat
+    counter = document.createElement('div');   // unused
+    pausedBadge = document.createElement('button'); // unused
     toast = document.createElement('div');
     toast.id = 'uiref-toast';
-    counter = document.createElement('div');
-    counter.id = 'uiref-counter';
-    pausedBadge = document.createElement('button');
-    pausedBadge.id = 'uiref-paused';
-    pausedBadge.addEventListener('click', (e) => { e.stopPropagation(); resumeWorkflow(); });
     root.appendChild(highlight);
     root.appendChild(label);
-    root.appendChild(hint);
     root.appendChild(toast);
-    root.appendChild(counter);
-    root.appendChild(pausedBadge);
     document.documentElement.appendChild(root);
   }
 
@@ -157,11 +154,10 @@
     activatePicker('workflow');
   }
 
-  function showPausedBadge() {
-    if (!pausedBadge || !workflow) return;
-    pausedBadge.textContent = `▶ Resume uiref workflow · ${workflow.steps.length} step${workflow.steps.length === 1 ? '' : 's'}`;
-    pausedBadge.style.display = 'block';
-  }
+  // Paused badge is replaced by the purple tray badge that shows the step count.
+  // The user can open the extension popup to see full controls (Resume, Send,
+  // Cancel). No in-page badge.
+  function showPausedBadge() { /* no-op — see tray badge */ }
 
   function deactivatePicker() {
     if (!active) return;
@@ -181,62 +177,10 @@
     syncState();
   }
 
-  function updateHint() {
-    hint.innerHTML = '';
-    const text = document.createElement('span');
-    text.className = 'uiref-hint-text';
-    if (mode === 'workflow') {
-      const n = workflow?.steps.length || 0;
-      text.innerHTML =
-        n === 0
-          ? 'Click to add elements. Typing, form submits, links still work normally.'
-          : `${n} step${n === 1 ? '' : 's'} captured. Click to add more, or finish.`;
-      hint.appendChild(text);
-      if (n > 0) {
-        const sendBtn = document.createElement('button');
-        sendBtn.className = 'uiref-hint-button';
-        sendBtn.textContent = `Send ${n} step${n === 1 ? '' : 's'} to Claude`;
-        sendBtn.addEventListener('click', (e) => { e.stopPropagation(); finishWorkflow(); });
-        hint.appendChild(sendBtn);
-
-        const pauseBtn = document.createElement('button');
-        pauseBtn.className = 'uiref-hint-button secondary';
-        pauseBtn.textContent = 'Hide picker';
-        pauseBtn.title = 'Hide the picker overlay. Workflow stays saved — resume anytime.';
-        pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pauseWorkflow(); });
-        hint.appendChild(pauseBtn);
-      }
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'uiref-hint-button secondary';
-      cancelBtn.textContent = 'Cancel';
-      cancelBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        workflow = null;
-        await clearStoredWorkflow();
-        showToast({ title: 'Workflow cancelled' });
-        deactivatePicker();
-      });
-      hint.appendChild(cancelBtn);
-    } else {
-      text.textContent = 'Click an element to send to Claude.';
-      hint.appendChild(text);
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'uiref-hint-button secondary';
-      cancelBtn.textContent = 'Cancel';
-      cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); deactivatePicker(); });
-      hint.appendChild(cancelBtn);
-    }
-    hint.style.display = 'flex';
-  }
-
-  function updateCounter() {
-    if (mode === 'workflow' && workflow) {
-      counter.textContent = `step ${workflow.steps.length + 1}${workflow.steps.length ? ` (press Enter to send ${workflow.steps.length} captured)` : ''}`;
-      counter.style.display = 'block';
-    } else {
-      counter.style.display = 'none';
-    }
-  }
+  // The in-page hint bar is replaced by the extension popup + tray badge.
+  // Keep as a no-op so callers still work.
+  function updateHint() { /* no-op — controls are in the popup */ }
+  function updateCounter() { /* no-op — count is on the tray badge */ }
 
   // =============================================================
   // MOUSE / KEYBOARD

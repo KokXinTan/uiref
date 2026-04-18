@@ -12,6 +12,16 @@
   if (window.__uirefInjected_main) return;
   window.__uirefInjected_main = true;
 
+  // Opt-out config. Set BEFORE uiref loads (e.g., in your app bootstrap):
+  //   window.__uirefConfig = { patchConsole: false, patchNetwork: false };
+  // Useful when debugging framework warnings — uiref's console wrapper
+  // shows at the top of every stack trace otherwise.
+  const cfg = window.__uirefConfig || {};
+  const patchConsole = cfg.patchConsole !== false;
+  const patchErrors  = cfg.patchErrors  !== false;
+  const patchNetwork = cfg.patchNetwork !== false;
+  const patchNavigation = cfg.patchNavigation !== false;
+
   const MAX_ARG_LEN = 200;
 
   function safeStringify(v) {
@@ -37,16 +47,26 @@
   }
 
   // ----- Console -----
-  ['log', 'info', 'warn', 'error'].forEach((level) => {
-    const orig = console[level];
-    if (!orig) return;
-    console[level] = function (...args) {
-      emit('uiref:console', { level, args: args.map(safeStringify) });
-      return orig.apply(console, args);
-    };
-  });
+  if (patchConsole) {
+    ['log', 'info', 'warn', 'error'].forEach((level) => {
+      const orig = console[level];
+      if (!orig) return;
+      console[level] = function (...args) {
+        // Call the original FIRST so the browser's "real" stack for the
+        // warning is captured before our wrapper adds itself. The emit
+        // happens after, in a microtask, so it never affects the caller's
+        // perceived stack.
+        try { orig.apply(console, args); } finally {
+          try {
+            queueMicrotask(() => emit('uiref:console', { level, args: args.map(safeStringify) }));
+          } catch {}
+        }
+      };
+    });
+  }
 
   // ----- Uncaught errors -----
+  if (patchErrors) {
   window.addEventListener('error', (ev) => {
     emit('uiref:error', {
       message: ev.message,
@@ -65,6 +85,7 @@
       kind: 'unhandledrejection',
     });
   });
+  }
 
   // Extract just the GraphQL operationName from a request body if present.
   // This is the ONLY body field we capture (it's not sensitive — it's visible
@@ -84,7 +105,7 @@
 
   // ----- Fetch -----
   const origFetch = window.fetch;
-  if (origFetch) {
+  if (patchNetwork && origFetch) {
     window.fetch = function (input, init) {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
@@ -128,7 +149,7 @@
 
   // ----- XMLHttpRequest -----
   const OrigXHR = window.XMLHttpRequest;
-  if (OrigXHR) {
+  if (patchNetwork && OrigXHR) {
     const origOpen = OrigXHR.prototype.open;
     const origSend = OrigXHR.prototype.send;
     OrigXHR.prototype.open = function (method, url) {
@@ -190,17 +211,19 @@
   });
 
   // ----- SPA navigation -----
-  const origPush = history.pushState;
-  const origReplace = history.replaceState;
-  history.pushState = function () {
-    emit('uiref:navigate', { from: location.pathname, kind: 'push' });
-    return origPush.apply(this, arguments);
-  };
-  history.replaceState = function () {
-    emit('uiref:navigate', { from: location.pathname, kind: 'replace' });
-    return origReplace.apply(this, arguments);
-  };
-  window.addEventListener('popstate', () => {
-    emit('uiref:navigate', { to: location.pathname, kind: 'pop' });
-  });
+  if (patchNavigation) {
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function () {
+      emit('uiref:navigate', { from: location.pathname, kind: 'push' });
+      return origPush.apply(this, arguments);
+    };
+    history.replaceState = function () {
+      emit('uiref:navigate', { from: location.pathname, kind: 'replace' });
+      return origReplace.apply(this, arguments);
+    };
+    window.addEventListener('popstate', () => {
+      emit('uiref:navigate', { to: location.pathname, kind: 'pop' });
+    });
+  }
 })();

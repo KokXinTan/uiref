@@ -105,6 +105,23 @@ Each array entry has a `t` field (epoch millis). The `window_ms` at the top indi
 
 **Privacy note:** `events.network` captures URL, method, status, duration, and optionally `operation` (the GraphQL `operationName` field, extracted from POST bodies specifically for disambiguating repeated calls to `/graphql` endpoints). **No request bodies, response bodies, headers, payloads, or query variables are captured.** The GraphQL operation name is a safe exception because it's already visible to anyone with DevTools access and is not sensitive. `events.console` captures stringified arguments truncated to 200 chars each.
 
+### Opting out of event patches
+
+The extension patches `console.*`, `window.onerror` + `unhandledrejection`, `fetch` + `XMLHttpRequest`, and `history.pushState/replaceState` in the page's main world. These wrappers show up at the top of stack traces when they're invoked (e.g., the uiref console wrapper appears above the "real" caller in `console.warn()` traces).
+
+If that noise is a problem while debugging framework warnings, opt out specific patches by setting `window.__uirefConfig` **before** the extension runs (earliest reasonable place: `app.html` or the root entry script):
+
+```js
+window.__uirefConfig = {
+  patchConsole: false,    // don't wrap console.*
+  patchErrors: false,     // don't hook window.error / unhandledrejection
+  patchNetwork: false,    // don't wrap fetch / XMLHttpRequest
+  patchNavigation: false, // don't wrap history.pushState / replaceState
+};
+```
+
+Disabling a patch means the corresponding events won't be captured in uirefs for that page. All patches are enabled by default.
+
 ## Store snapshot opt-in
 
 Universal store introspection (Redux / Zustand / Pinia / Svelte stores / Jotai / Valtio / custom) is impossible for a browser extension because each library exposes state differently — many not at all. Instead, uiref supports a one-line developer opt-in.
